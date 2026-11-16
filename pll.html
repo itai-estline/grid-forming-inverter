@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Side chapter: PLL grid sync (V9) · Grid-Forming Inverter</title>
+  <meta name="description" content="What a phase-locked loop does, how my V9 model used one to line up with a grid before closing a breaker, and why it is a side branch and not inside the final V13 machine.">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/detail.css">
+  <style>
+    /* Page-local styles for the PLL widget (gw). */
+    .gw { display: grid; gap: var(--s-4); }
+    .gw-controls { display: flex; flex-wrap: wrap; gap: var(--s-4) var(--s-5); align-items: flex-end; }
+    .gw-field { display: grid; gap: 6px; flex: 1 1 220px; font: 500 14px/1.3 var(--font-sans); color: var(--ink-2); }
+    .gw-field output { font-family: var(--font-mono); color: var(--ink); }
+    .gw input[type="range"] { width: 100%; accent-color: var(--ac); min-height: 28px; }
+    .gw input:focus-visible, .gw button:focus-visible { outline: 2px solid var(--ac); outline-offset: 3px; }
+    .gw-btns { display: flex; gap: var(--s-3); }
+    .gw-btn { font: 500 14px/1 var(--font-sans); color: var(--ink); background: var(--night-2); border: 1px solid var(--night-4); border-radius: var(--radius); padding: 10px 16px; min-height: 40px; cursor: pointer; }
+    .gw-btn:hover { background: var(--night-3); }
+    .gw-plot { display: block; width: 100%; height: auto; background: var(--night-0); border: 1px solid var(--night-3); border-radius: var(--radius); }
+    .gw-plot text { font-family: var(--font-mono); font-size: 11px; fill: var(--ink-3); stroke: none; }
+    .gw-plot .grid { stroke: var(--night-3); stroke-width: 1; fill: none; }
+    .gw-plot .band { fill: var(--night-2); stroke: none; }
+    .gw-plot .gsig { stroke: var(--ac); stroke-width: 2.5; fill: none; stroke-linejoin: round; }
+    .gw-plot .psig { stroke: var(--ctl); stroke-width: 2; fill: none; stroke-linejoin: round; }
+    .gw-plot .esig { stroke: var(--dc); stroke-width: 2; fill: none; stroke-linejoin: round; }
+    .gw-plot text.t-g { fill: var(--ac); } .gw-plot text.t-p { fill: var(--ctl); } .gw-plot text.t-e { fill: var(--dc); }
+    .gw-lamp { display: inline-block; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--night-4); color: var(--ink-3); }
+    .gw-lamp.on { color: var(--night-0); background: var(--inv1); border-color: var(--inv1); }
+    .gw-readout { margin: 0; font: 13px/1.6 var(--font-mono); color: var(--ink-2); }
+    .gw-readout b { color: var(--ink); font-weight: 500; }
+  </style>
+  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }</script>
+  <script type="module" src="js/detail/detail.js"></script>
+</head>
+<body class="detail" data-page="pll">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header" data-site-header></header>
+  <main id="main">
+    <article class="page">
+      <header class="page-head">
+        <p class="eyebrow">Side chapter · not part of the final machine</p>
+        <h1>Side chapter: PLL grid sync (V9)</h1>
+        <p class="lede">Before an inverter connects to a grid, it should know what the grid is doing. In V9 I used a phase-locked loop to measure an outside grid, checked that my inverter was close enough in frequency, and then closed a breaker at 0.5 s. Like the dq frame, it is a side branch and not part of the final V13 machine.</p>
+        <p class="back-links"><a href="index.html">Back to the journey</a></p>
+      </header>
+
+      <div class="results">
+        <div class="result"><span class="value">SYNC OK</span><span class="label">Stayed on for the whole run</span><span class="src">Manual V9</span></div>
+        <div class="result"><span class="value">0.5 s</span><span class="label">Breaker closes, one spike, then clean sines</span><span class="src">Manual V9</span></div>
+      </div>
+
+      <section id="what-it-does">
+        <h2>What a phase-locked loop does</h2>
+        <p>A phase-locked loop (PLL) is a circuit, or a few lines of code, that watches an incoming sine wave and generates its own sine wave that stays in step with it. It does not just copy the frequency. It matches the phase, meaning where in its cycle the wave is right now.</p>
+        <p>It has three parts in a loop. A phase detector measures how far apart the two waves are. A PI controller turns that error into a frequency correction. An oscillator integrates the frequency into a phase angle. In equations, for a grid at angle θ<sub>g</sub> and the PLL at angle θ<sub>p</sub>:</p>
+        <p class="eq"><var>e</var> = sin(<var>θ</var><sub>g</sub> − <var>θ</var><sub>p</sub>),&nbsp; <var>ω</var><sub>p</sub> = <var>ω</var><sub>nom</sub> + <var>K</var><sub>p</sub>·<var>e</var> + <var>K</var><sub>i</sub>·∫<var>e</var> d<var>t</var>,&nbsp; <var>θ</var><sub>p</sub> = ∫<var>ω</var><sub>p</sub> d<var>t</var></p>
+        <p>While the error is not zero, the frequency is pushed up or down until it is. The integral term learns the frequency difference, so once the PLL has settled the phase error goes to zero even if the grid is not exactly at its nominal frequency. Try it below. The frequency is slowed down so you can watch.</p>
+
+        <figure class="widget" data-illustrative id="w-pll">
+          <div class="gw">
+            <div class="gw-controls">
+              <label class="gw-field" for="wp-off">
+                <span>Grid frequency vs nominal: <output id="wp-off-out" for="wp-off">+10 %</output></span>
+                <input type="range" id="wp-off" min="-20" max="20" step="1" value="10" aria-valuetext="plus 10 percent">
+              </label>
+              <label class="gw-field" for="wp-wn">
+                <span>Loop speed: <output id="wp-wn-out" for="wp-wn">6</output></span>
+                <input type="range" id="wp-wn" min="2" max="12" step="1" value="6" aria-valuetext="6">
+              </label>
+              <div class="gw-btns">
+                <button type="button" class="gw-btn" id="wp-play" aria-pressed="false">Play</button>
+                <button type="button" class="gw-btn" id="wp-step">Advance 1 s</button>
+                <button type="button" class="gw-btn" id="wp-restart">Restart</button>
+              </div>
+            </div>
+            <svg class="gw-plot" id="wp-plot" viewBox="0 0 720 360" role="img" aria-label="Top: a grid sine wave in cyan and the PLL's own sine wave in magenta, which starts out of step and is pulled onto the grid wave. Bottom: the phase error in degrees falling to zero."></svg>
+            <p class="gw-readout" id="wp-readout">This widget needs JavaScript. A PLL starts out of step with the grid and pulls its phase error to zero within a couple of seconds on the slowed-down time scale.</p>
+          </div>
+          <figcaption>Illustrative model, not the Simulink result. A simple single-phase PLL with a PI loop filter, damping ratio 0.7. The loop starts 120° out of phase and 10 % off in frequency by default. The lamp lights when the frequency difference is under 1 % of nominal, which is the same proportion as V9's 0.6 Hz check on a 60 Hz system.</figcaption>
+        </figure>
+      </section>
+
+      <section id="v9">
+        <h2>What V9 built</h2>
+        <p>V9 starts from V8 and adds an outside grid<sup class="fn"><a href="#fn-1" id="fnref-1">1</a></sup>. The grid is a three-phase voltage source at 60 V phase-to-phase RMS and 60 Hz, with its own source impedance. A three-phase breaker sits between my inverter's AC bus and that source. Voltage sensors go on the grid side of the breaker, because sensors on the inverter side only read the inverter's own voltage.</p>
+        <p>The PLL is Simulink's three-phase sinusoidal measurement block, with a PI loop filter (<var>P</var> = 0.1, <var>I</var> = 1), an initial frequency of 60 Hz and a sample time of 1e-5 s<sup class="fn"><a href="#fn-1">1</a></sup>. That sample time mattered: with the default inherited setting the discrete PLL never locked and reported zero amplitude for the whole run<sup class="fn"><a href="#fn-1">1</a></sup>. A step block closes the breaker at 0.5 s, and the run lasts 3.0 s, because the PLL takes two to three seconds to settle with those gains<sup class="fn"><a href="#fn-1">1</a></sup>.</p>
+        <p>The synchronisation check subtracts the inverter's frequency from the PLL's measured grid frequency and lights <strong>SYNC OK</strong> when the difference is under 0.6 Hz<sup class="fn"><a href="#fn-1">1</a></sup>.</p>
+        <h3>The check I had to change</h3>
+        <p>My first plan also required the phase angles to match, with a difference under 0.05. That cannot work here. The PLL angle and my inverter's angle come from two independent generators, so their difference sweeps through every value from 0 to 2π, and never stays near zero<sup class="fn"><a href="#fn-1">1</a></sup>. I dropped the angle test and kept only frequency. I also had to raise the frequency threshold from 0.1 Hz to 0.6 Hz, because the virtual synchronous machine runs at about 60.5 Hz when it carries load, so a 0.5 Hz difference is normal<sup class="fn"><a href="#fn-1">1</a></sup>.</p>
+        <aside class="note">
+          <p>So V9 is a weaker demonstration than the name suggests. SYNC OK only compares frequency, and the breaker closes at 0.5 s because I told it to, not because the check allowed it. That is why there is a spike when it closes. What the run does show is that the PLL measures the grid correctly and the inverter stays stable when it is connected.</p>
+        </aside>
+      </section>
+
+      <section id="result">
+        <h2>What it showed</h2>
+        <p>SYNC OK stayed at 1 for the whole simulation. The breaker closed at 0.5 s with a single spike in the transient, and the three-phase output voltage then recovered to clean, symmetric sine waves<sup class="fn"><a href="#fn-1">1</a></sup>. The PLL's amplitude reading settled near 49 and its frequency converged on 60 Hz<sup class="fn"><a href="#fn-1">1</a></sup>. The 49 is what a 60 V phase-to-phase RMS grid should read: 60 / √3 × √2 ≈ 49 V peak per phase.</p>
+      </section>
+
+      <section id="following">
+        <h2>How this relates to grid-following</h2>
+        <p>Most inverters on the grid today are grid-following. They run a PLL all the time, take the angle it reports and inject current at that angle<sup class="fn"><a href="#fn-2" id="fnref-2">2</a></sup>. That works while there is a strong grid to follow. With a weak grid, or none, there is nothing to lock to, and the PLL itself can lose lock during disturbances<sup class="fn"><a href="#fn-2">2</a></sup>.</p>
+        <p>My inverter is the other kind. It makes its own angle by integrating the frequency from the swing equation, so it needs no outside signal to run. In V9 the PLL has a much smaller job. It only measures the grid, so I know whether it is safe to connect, and then the inverter carries on with its own angle. The PLL is a measuring tool here, not the thing the inverter depends on.</p>
+      </section>
+
+      <section id="not-in-v13">
+        <h2>Why it is not in the final machine</h2>
+        <p>V8 and V9 are a separate branch off V7. The final model, V13, follows V7 to the two-inverter model (V10) and then the current-limit and voltage-loop work (V12, V13), and none of that contains a PLL<sup class="fn"><a href="#fn-3" id="fnref-3">3</a></sup>. In V13 the two inverters line up with each other through the shared bus and their droop, with no outside grid to measure. The <a href="dq-frame.html">dq-frame side chapter</a> is the other half of this branch, and the <a href="build-log.html">build log</a> shows where both sit among the thirteen versions.</p>
+      </section>
+
+      <section class="footnotes" aria-label="Sources for this page"><h2>Sources for this page</h2>
+        <ol>
+          <li id="fn-1">Manual V9, Steps 1 to 7 and validation: 60 V phase-to-phase RMS source at 60 Hz, sensors on the grid side, PLL block with <var>P</var> = 0.1, <var>I</var> = 1 and sample time 1e-5, sync check |<var>f</var><sub>grid</sub> − <var>f</var><sub>inv</sub>| &lt; 0.6, breaker step at 0.5 s, 3.0 s run, SYNC OK = 1 throughout, grid magnitude about 49. <a href="#fnref-1" aria-label="Back to text">↩</a></li>
+          <li id="fn-2">Note 02, Grid-following vs grid-forming (PLL section): followers lock to the grid with a PLL and inject current; a weak or absent grid leaves nothing to follow, and a PLL can lose lock in disturbances. <a href="#fnref-2" aria-label="Back to text">↩</a></li>
+          <li id="fn-3">Brief section 2: V13 is built on the V7, V10, V12 line; V8 and V9 are a separate branch off V7. <a href="#fnref-3" aria-label="Back to text">↩</a></li>
+        </ol>
+      </section>
+
+      <nav class="pager"><a rel="prev" href="dq-frame.html">Side chapter: the dq frame (V8)</a><a rel="next" href="build-log.html">Build log, V1 to V13</a></nav>
+    </article>
+  </main>
+  <footer class="site-footer" data-site-footer></footer>
+
+  <script type="module">
+    // Illustrative model: single-phase PLL with a PI loop filter pulling onto a grid sine.
+    // Time is slowed so the nominal frequency is 1 Hz on screen, standing in for 60 Hz.
+    const NS = 'http://www.w3.org/2000/svg';
+    const plot = document.getElementById('wp-plot');
+    const offS = document.getElementById('wp-off'), offO = document.getElementById('wp-off-out');
+    const wnS = document.getElementById('wp-wn'), wnO = document.getElementById('wp-wn-out');
+    const playBtn = document.getElementById('wp-play');
+    const stepBtn = document.getElementById('wp-step');
+    const restartBtn = document.getElementById('wp-restart');
+    const readout = document.getElementById('wp-readout');
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const WN0 = 2 * Math.PI, WINDOW = 4, N = 200, DT = WINDOW / N, H = 0.002, ZETA = 0.7;
+    const X0 = 56, X1 = 704, GY = 90, GA = 60, EY = 270, ES = 55 / 180;
+    let thG, thP, z, off = 0.1, wn = 6, buf = [], acc = 0, last = 0, playing = false, simT = 0;
+
+    function el(name, attrs, text) {
+      const e = document.createElementNS(NS, name);
+      for (const k in attrs) e.setAttribute(k, attrs[k]);
+      if (text != null) e.textContent = text;
+      plot.append(e);
+      return e;
+    }
+
+    function reset() {
+      thG = 0; thP = 2.1; z = 0; buf = []; acc = 0; simT = 0;
+      pushSample();
+    }
+
+    function wrap(a) { a = (a + Math.PI) % (2 * Math.PI); if (a < 0) a += 2 * Math.PI; return a - Math.PI; }
+
+    function pushSample() {
+      const wg = WN0 * (1 + off);
+      const err = wrap(thG - thP);
+      const wp = WN0 + 2 * ZETA * wn * Math.sin(err) + z;
+      buf.push({ g: Math.cos(thG), p: Math.cos(thP), e: err * 180 / Math.PI, df: (wp - wg) / WN0 * 100 });
+      if (buf.length > N) buf.shift();
+    }
+
+    function advance(seconds) {
+      const steps = Math.round(seconds / H);
+      const kp = 2 * ZETA * wn, ki = wn * wn, wg = WN0 * (1 + off);
+      for (let i = 0; i < steps; i++) {
+        const e = Math.sin(thG - thP);
+        thG += wg * H;
+        thP += (WN0 + kp * e + z) * H;
+        z += ki * e * H;
+        simT += H;
+        if (i % 10 === 9) pushSample();
+      }
+    }
+
+    function line(key, f) {
+      return buf.map((s, i) => (i ? 'L' : 'M') + (X0 + (X1 - X0) * i / (N - 1)).toFixed(1) + ' ' + f(s[key]).toFixed(1)).join('');
+    }
+
+    function draw() {
+      plot.replaceChildren();
+      for (const v of [1, 0, -1]) {
+        el('line', { class: 'grid', x1: X0, x2: X1, y1: GY - v * GA, y2: GY - v * GA });
+        el('text', { x: X0 - 6, y: GY - v * GA + 4, 'text-anchor': 'end' }, (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v));
+      }
+      el('path', { class: 'gsig', d: line('g', v => GY - v * GA) });
+      el('path', { class: 'psig', d: line('p', v => GY - v * GA) });
+      el('text', { class: 't-g', x: X0, y: 16 }, 'grid');
+      el('text', { class: 't-p', x: X0 + 48, y: 16 }, 'PLL output');
+      for (const v of [180, 90, 0, -90, -180]) {
+        el('line', { class: 'grid', x1: X0, x2: X1, y1: EY - v * ES, y2: EY - v * ES });
+        el('text', { x: X0 - 6, y: EY - v * ES + 4, 'text-anchor': 'end' }, (v < 0 ? '−' : '') + Math.abs(v) + '°');
+      }
+      el('path', { class: 'esig', d: line('e', v => EY - v * ES) });
+      el('text', { class: 't-e', x: X0, y: 184 }, 'phase error, grid minus PLL');
+      el('text', { x: (X0 + X1) / 2, y: 352, 'text-anchor': 'middle' }, 'last 4 seconds, slowed down (1 Hz on screen stands in for 60 Hz)');
+      const s = buf[buf.length - 1];
+      const ok = Math.abs(s.df) < 1;
+      readout.innerHTML = 'Phase error <b>' + s.e.toFixed(1) + '°</b>. Frequency difference <b>' + (s.df >= 0 ? '+' : '−') + Math.abs(s.df).toFixed(1) +
+        ' %</b> of nominal. <span class="gw-lamp' + (ok ? ' on' : '') + '">SYNC OK</span>';
+    }
+
+    function frame(now) {
+      if (!playing) return;
+      acc += Math.min(0.1, (now - last) / 1000);
+      last = now;
+      const k = Math.floor(acc / DT);
+      if (k > 0) { acc -= k * DT; advance(k * DT); draw(); }
+      requestAnimationFrame(frame);
+    }
+
+    function setPlaying(on) {
+      playing = on;
+      playBtn.textContent = on ? 'Pause' : 'Play';
+      playBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      if (on) { last = performance.now(); requestAnimationFrame(frame); }
+    }
+
+    function restart() {
+      reset();
+      if (reduced || !playing) { advance(WINDOW); }
+      draw();
+    }
+
+    offS.addEventListener('input', () => {
+      off = parseFloat(offS.value) / 100;
+      const t = (offS.value > 0 ? '+' : offS.value < 0 ? '−' : '') + Math.abs(offS.value) + ' %';
+      offO.textContent = t; offS.setAttribute('aria-valuetext', (offS.value > 0 ? 'plus ' : offS.value < 0 ? 'minus ' : '') + Math.abs(offS.value) + ' percent');
+      if (!playing) restart();
+    });
+    wnS.addEventListener('input', () => {
+      wn = parseFloat(wnS.value); wnO.textContent = wnS.value; wnS.setAttribute('aria-valuetext', wnS.value);
+      if (!playing) restart();
+    });
+    playBtn.addEventListener('click', () => setPlaying(!playing));
+    stepBtn.addEventListener('click', () => { advance(1); draw(); });
+    restartBtn.addEventListener('click', () => { reset(); if (!playing) advance(WINDOW); draw(); });
+
+    reset();
+    if (reduced) { advance(WINDOW); draw(); } else { draw(); setPlaying(true); }
+  </script>
+</body>
+</html>

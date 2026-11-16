@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The voltage loop · Grid-Forming Inverter</title>
+  <meta name="description" content="How my inverter design makes each phase's capacitor voltage follow its reference with a proportional gain plus feed-forward, why the integrator was removed, and how I chose the gain.">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/detail.css">
+  <style>
+    /* Page-local styles for the hand-drawn diagram (gd) and the small widget (gw) on this page. */
+    .gd-scroll { overflow-x: auto; }
+    .gd-scroll:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+    svg.gd { display: block; width: 100%; min-width: 640px; height: auto; }
+    svg.gd .box { fill: var(--night-2); stroke: var(--night-4); stroke-width: 1.5; }
+    svg.gd .box.focus { stroke: var(--ctl); stroke-width: 2.5; }
+    svg.gd .box.power { stroke: var(--ac); }
+    svg.gd .ln { fill: none; stroke: var(--ink-3); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    svg.gd .ln.fb { stroke: var(--ctl); stroke-dasharray: 5 6; }
+    svg.gd .arrowhead { fill: var(--ink-3); }
+    svg.gd text { font-family: var(--font-sans); font-size: 14px; fill: var(--ink); stroke: none; }
+    svg.gd text.sub { font-family: var(--font-mono); font-size: 12px; fill: var(--ink-2); }
+    svg.gd text.lbl { font-size: 12px; fill: var(--ink-3); }
+    svg.gd text.lbl.c-ctl { fill: var(--ctl); }
+
+    .gw { display: grid; gap: var(--s-4); }
+    .gw-controls { display: flex; flex-wrap: wrap; gap: var(--s-4) var(--s-5); align-items: flex-end; }
+    .gw-field { display: grid; gap: 6px; flex: 1 1 240px; font: 500 14px/1.3 var(--font-sans); color: var(--ink-2); }
+    .gw-field output { font-family: var(--font-mono); color: var(--ink); }
+    .gw input[type="range"] { width: 100%; accent-color: var(--ac); min-height: 28px; }
+    .gw input:focus-visible, .gw-btn:focus-visible { outline: 2px solid var(--ac); outline-offset: 3px; }
+    .gw-btns { display: flex; flex-wrap: wrap; gap: 8px; flex: 1 1 100%; }
+    .gw-btn { font: 500 13px/1.2 var(--font-sans); color: var(--ink); background: var(--night-3); border: 1px solid var(--night-4); border-radius: var(--radius-pill); padding: 9px 14px; cursor: pointer; }
+    .gw-btn[aria-pressed="true"] { border-color: var(--ac); color: var(--ac); }
+    .gw-plot { display: block; width: 100%; height: auto; background: var(--night-0); border: 1px solid var(--night-3); border-radius: var(--radius); }
+    .gw-plot text { font-family: var(--font-mono); font-size: 11px; fill: var(--ink-3); stroke: none; }
+    .gw-plot .grid { stroke: var(--night-3); stroke-width: 1; fill: none; }
+    .gw-plot .zero { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 3 5; fill: none; }
+    .gw-plot .ghost { stroke: var(--ink-3); stroke-width: 1.5; stroke-dasharray: 2 4; fill: none; }
+    .gw-plot .wave { stroke: var(--ac); stroke-width: 2.25; fill: none; stroke-linejoin: round; }
+    .gw-plot .mean { stroke: var(--warn); stroke-width: 1.5; fill: none; }
+    .gw-plot text.t-ac { fill: var(--ac); }
+    .gw-plot text.t-warn { fill: var(--warn); }
+    .gw-readout { margin: 0; font: 13px/1.6 var(--font-mono); color: var(--ink-2); }
+    .gw-readout b { color: var(--ink); font-weight: 500; }
+  </style>
+  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }</script>
+  <script type="module" src="js/detail/detail.js"></script>
+</head>
+<body class="detail" data-page="voltage-loop">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header" data-site-header></header>
+  <main id="main">
+    <article class="page">
+      <header class="page-head">
+        <p class="eyebrow">Inside the design · Station 11</p>
+        <h1>The voltage loop</h1>
+        <p class="lede">The virtual synchronous machine decides what the output voltage should be. The voltage loop is the part that makes the filter capacitors actually produce it. It is only two terms, a small proportional gain and a feed-forward, and the most useful thing I did to it was take an integrator out.</p>
+        <p class="back-links"><a href="index.html#s11">Back to the journey, station 11</a></p>
+      </header>
+
+      <div class="results">
+        <div class="result"><span class="value">−0.12 % / −0.04 %</span><span class="label">Capacitor voltage error against the reference, inverter 1 / 2, base load</span><span class="src">V13, D14</span></div>
+        <div class="result"><span class="value">0.000 V</span><span class="label">DC offset left on the output (V7, V10 and V12 had +17.7 V on phase a)</span><span class="src">V13, D14, D13</span></div>
+        <div class="result"><span class="value">Kp = 0.002</span><span class="label">Proportional gain, with feed-forward 1/200 = 0.005 and Ki = 0</span><span class="src">V13, D13, D14</span></div>
+        <div class="result"><span class="value">71.5 V</span><span class="label">Peak of the phase voltage at the filter capacitor (V0)</span><span class="src">V13, D13</span></div>
+      </div>
+
+      <section id="what">
+        <h2>What the loop does</h2>
+        <p>The controller upstream produces a reference for each phase: a sine of amplitude <var>V</var><sub>mag</sub> at the angle <var>θ</var> the swing equation gave it. The converter, filter and capacitor are the thing being controlled. The voltage loop looks at the voltage on each phase's filter capacitor, compares it with the reference, and adjusts the converter's modulation until the two match.</p>
+        <p>It works in the abc frame, on each of the three phases separately, so the signal it is chasing is an ordinary 60 Hz sine, not a constant. That matters for the integrator story further down. This loop is what makes my inverter behave like a voltage source: whatever the load does, the capacitor voltage is pushed back toward the reference.</p>
+        <p>I did not always have this. Until V13 the "loop" compared a 346-amplitude reference with a voltage scaled down by 150. Logging the controller output showed it never came near saturation and the voltage was not really being regulated: the loop was acting almost like a fixed gain<sup class="fn"><a href="#fn-1" id="fnref-1">1</a></sup>. V13 rebuilt it so the feedback is in volts and does real work.</p>
+      </section>
+
+      <section id="path">
+        <h2>The whole control path, in signal order</h2>
+        <p>Here is where the voltage loop sits among the other pieces. Read the top row left to right, then the bottom row right to left. The dashed magenta lines are the measurements that come back from the output.</p>
+</section>
+
+      <section id="controller">
+        <h2>The final controller</h2>
+        <p>For each phase, the modulation command is the reference times a feed-forward gain plus a proportional correction on the error:</p>
+        <p class="eq"><var>u</var> = <var>K</var><sub>ff</sub>·<var>r</var> + <var>K</var><sub>p</sub>·(<var>r</var> − <var>y</var>)</p>
+        <p>Here <var>r</var> is the reference in volts and <var>y</var> is the measured capacitor voltage in volts. The feed-forward gain is <var>K</var><sub>ff</sub> = 1/<var>V</var><sub>dc,half</sub> = 1/200 = 0.005, because a modulation of 1 on a 400 V bus is worth 200 V. In other words the feed-forward alone says "to make <var>r</var> volts, ask for <var>r</var>/200", and it gets most of the way there. The proportional term, <var>K</var><sub>p</sub> = 0.002, only has to clean up what the feed-forward misses<sup class="fn"><a href="#fn-3" id="fnref-3">3</a></sup>.</p>
+        <p>There is no integrator. After this the command passes through a saturation (the converter cannot ask for more than the bus can give), the modulation stage and the converter. The reference amplitude at the output is <var>V</var><sub>0</sub> = 71.5 V, the value I logged at the capacitor in the simulation, and the Q–V droop moves it from there<sup class="fn"><a href="#fn-4" id="fnref-4">4</a></sup>.</p>
+      </section>
+
+      <section id="no-integrator">
+        <h2>Why Ki = 0</h2>
+        <p>Every model on the V7, V10, V12 line had a PID block in this spot with an integral gain <var>K</var><sub>i</sub> = 0.1. An integrator is the textbook way to remove a steady error, so it looked harmless. But the thing it was integrating here is a sine. The integral of a sine is a cosine plus a constant, and the constant is set by where in the cycle the integration started. It never decays, and the feedback was too weak to push it out.</p>
+        <p class="eq">offset ≈ (<var>A</var>·<var>K</var><sub>i</sub> / <var>ω</var>)·cos <var>φ</var><sub>0</sub>,&nbsp;&nbsp; <var>A</var>·<var>K</var><sub>i</sub>/<var>ω</var> = 346 × 0.1 / 377 ≈ 0.092</p>
+        <p>When I logged the controller output for 0.3 s in V13 the offset was there: a DC component of +17.7 V on the phase a capacitor and −8.9 V on phases b and c, in both inverters<sup class="fn"><a href="#fn-5" id="fnref-5">5</a></sup>. That is about 2 A of DC into the 8.4 Ω load, and the phase A current measurement saw it too. The full story of how I found it, and why it was invisible for so long, is on the <a href="what-went-wrong.html">what went wrong page</a>.</p>
+
+        <figure class="widget" data-illustrative id="w-dc">
+          <div class="gw">
+            <div class="gw-controls">
+              <label class="gw-field" for="dc-off">
+                <span>DC offset on the phase voltage: <output id="dc-out" for="dc-off">0.0 V</output></span>
+                <input type="range" id="dc-off" min="-20" max="20" step="0.1" value="0" aria-valuetext="0.0 volts">
+              </label>
+              <div class="gw-btns" role="group" aria-label="Offsets found in the models">
+                <button type="button" class="gw-btn" id="dc-b0" aria-pressed="true">Ki = 0 (V13): 0 V</button>
+                <button type="button" class="gw-btn" id="dc-ba" aria-pressed="false">Phase a, V7 / V10 / V12: +17.7 V</button>
+                <button type="button" class="gw-btn" id="dc-bb" aria-pressed="false">Phases b and c, V7 / V10 / V12: −8.9 V</button>
+              </div>
+            </div>
+            <svg class="gw-plot" id="dc-plot" viewBox="0 0 720 300" role="img" aria-label="Two cycles of a 71.5 volt peak, 60 hertz sine, shifted up or down by the chosen DC offset."></svg>
+            <p class="gw-readout" id="dc-readout">This plot needs JavaScript. A +17.7 V offset on a 71.5 V sine pushes the positive peak to 89.2 V and the negative peak to −53.8 V.</p>
+          </div>
+          <figcaption>Illustrative picture, not a simulation trace. It adds a constant to a 71.5 V peak, 60 Hz sine. The buttons use the offsets I logged in the simulation; the slider lets you try others. The dotted line is the same sine with no offset.</figcaption>
+        </figure>
+
+        <p>With Ki = 0 the offset is 0.000 V<sup class="fn"><a href="#fn-6" id="fnref-6">6</a></sup>. Total power at base load dropped from 964 W to 909 W when the DC component went away, which is a small reminder that the old results had been carrying a little extra current they should not have had<sup class="fn"><a href="#fn-6">6</a></sup>.</p>
+      </section>
+
+      <section id="kp">
+        <h2>Choosing the gain</h2>
+        <p>With the integrator gone, Kp is the only thing left to tune. I swept it at base load for 0.3 s, always with Ki = 0 and the feed-forward at 0.005<sup class="fn"><a href="#fn-6">6</a></sup>.</p>
+
+        <div class="table-wrap"><table class="data">
+          <caption>Voltage-loop gain sweep, base load, 0.3 s<sup class="fn"><a href="#fn-6">6</a></sup></caption>
+          <thead><tr><th scope="col">Kp</th><th scope="col">Capacitor voltage error, inv 1 / inv 2</th><th scope="col">DC offset</th><th scope="col">Modulation residual</th><th scope="col">Note</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">V12 (for reference)</th><td>−0.14 % / −0.05 %</td><td>+17.7 V</td><td>0.13 %</td><td>integrator, weak feedback</td></tr>
+            <tr><th scope="row"><b>0.002</b></th><td>−0.12 % / −0.04 %</td><td>0.000 V</td><td>0.05 %</td><td>chosen</td></tr>
+            <tr><th scope="row">0.005</th><td>−0.09 % / −0.01 %</td><td>0.001 V</td><td>0.12 %</td><td>fine, but no real gain</td></tr>
+            <tr><th scope="row">0.01</th><td>−0.09 % / +0.01 %</td><td>0.04 V</td><td>2.4 %</td><td>rings; power had not settled</td></tr>
+          </tbody>
+        </table></div>
+
+        <figure class="chart" data-chart='{"type":"bar","unit":"%","xLabel":"Voltage-loop setting","categories":["V12, Ki = 0.1","Kp = 0.002","Kp = 0.005","Kp = 0.01"],"series":[{"name":"Modulation residual","tone":"ctl","values":[0.13,0.05,0.12,2.4]}]}'>
+          <figcaption>Modulation residual from the sweep, the number I used to spot ringing<sup class="fn"><a href="#fn-6">6</a></sup>. It stays near 0.1 % until Kp = 0.01, then jumps to 2.4 %.</figcaption>
+        </figure>
+
+        <p>Tracking is already within 0.12 % at Kp = 0.002, because the feed-forward does most of the work. Going to 0.005 buys almost nothing, and 0.01 rings. So I took 0.002, which is a factor of five below the gain that rings. I also did not need the resonant term I had planned as a backup for a plain gain on a sine; the numbers never asked for it<sup class="fn"><a href="#fn-7" id="fnref-7">7</a></sup>.</p>
+        <aside class="note">One side effect worth knowing: V13 models run about 3.4 times slower than V12 (about 480 s per 0.3 s of simulated time with two runs in parallel), and that is independent of Kp<sup class="fn"><a href="#fn-6">6</a></sup>.</aside>
+      </section>
+
+      <section id="virtual-impedance">
+        <h2>Where the virtual impedance is subtracted</h2>
+        <p>The voltage loop also decides how the two virtual impedances reach the output. In V12 the virtual resistance was subtracted from the modulation, after the loop. Once the loop had real feedback it would have partly cancelled that drop, so in V13 I moved it into the reference: the loop's target is <var>V</var><sub>mag</sub>·sin(<var>θ</var>) − <var>R</var><sub>v</sub>·<var>i</var> − j<var>X</var><sub>v</sub>·<var>i</var>, and the loop simply tracks that<sup class="fn"><a href="#fn-8" id="fnref-8">8</a></sup>. The virtual resistance limits fault current and is explained on the <a href="current-limiting.html">current limiting page</a>. The virtual reactance keeps two inverters from fighting each other and is on the <a href="parallel.html">parallel operation page</a>.</p>
+      </section>
+
+      <section id="sensor">
+        <h2>The sensor behind the feedback</h2>
+        <p>In hardware the loop would need a measurement of each capacitor voltage. I did not design that part: the model simply reads the capacitor voltages. The 3D model shows where a voltage sense block would sit, near the filter capacitors.</p>
+        <figure class="part-viewer" data-model="assets/models/inverter/unit.glb" data-nodes="sensor_voltage"
+                data-poster="assets/renders/sensors.webp" data-tier="C"
+                data-callouts='[{"node":"sensor_voltage","text":"Would feed the capacitor voltage back to the voltage loop"}]'>
+          <figcaption>Voltage sensor. Typical part, not specified in this design. Drag to rotate.</figcaption>
+        </figure>
+      </section>
+
+      <section class="footnotes" aria-label="Sources for this page"><h2>Sources for this page</h2>
+        <ol>
+          <li id="fn-1">Decision log D12 and D13: the controller output peaked at 0.45, sinusoidal part 0.357, never near saturation; Vmag moved 0.1 % through the Q–V droop. <a href="#fnref-1" aria-label="Back to text">↩</a></li>
+          <li id="fn-2">Scrollytelling brief, section 2 (control path in signal order); V13, D13, D22, D26.</li>
+          <li id="fn-3">V13, D13: u = Kff·r + Kp·(r − y), Kff = 1/Vdc_half = 0.005, Ki = 0; manual V13, Step 2. <a href="#fnref-3" aria-label="Back to text">↩</a></li>
+          <li id="fn-4">V13, D13: V0 = 71.5 V (measured capacitor fundamental 71.4 V peak); Kq = 0.05 × 71.5 / 500 = 0.00715 V/VAR. <a href="#fnref-4" aria-label="Back to text">↩</a></li>
+          <li id="fn-5">V13, D13: <code>probe_v13_base.txt</code>, 0.3 s base load, last 0.1 s: DC +17.7 V on phase a and −8.9 V on b and c in both inverters, present in every V7, V10 and V12 model. <a href="#fnref-5" aria-label="Back to text">↩</a></li>
+          <li id="fn-6">V13, D14: Kp sweep at base load, 0.3 s, Ki = 0, feed-forward 0.005; total power 964 → 909 W once the DC component was gone. <a href="#fnref-6" aria-label="Back to text">↩</a></li>
+          <li id="fn-7">Manual V13, Step 2: a resonant term was planned only if the amplitude error stayed above 2 %; it did not. <a href="#fnref-7" aria-label="Back to text">↩</a></li>
+          <li id="fn-8">V13, D13: the virtual-resistance drop moved from the modulation to the voltage reference; D22 and D26 for the always-on virtual reactance. <a href="#fnref-8" aria-label="Back to text">↩</a></li>
+        </ol>
+      </section>
+
+      <nav class="pager"><a rel="prev" href="inertia-droop.html">Virtual inertia and droop</a><a rel="next" href="current-limiting.html">Current limiting and fault ride-through</a></nav>
+    </article>
+  </main>
+  <footer class="site-footer" data-site-footer></footer>
+
+  <script type="module">
+    // Illustrative: a 71.5 V peak, 60 Hz sine with a constant added.
+    const NS = 'http://www.w3.org/2000/svg';
+    const plot = document.getElementById('dc-plot');
+    const slider = document.getElementById('dc-off'), out = document.getElementById('dc-out');
+    const readout = document.getElementById('dc-readout');
+    const btns = { '0': document.getElementById('dc-b0'), '17.7': document.getElementById('dc-ba'), '-8.9': document.getElementById('dc-bb') };
+    const A = 71.5, F = 60, T = 2 / F;
+    const X0 = 56, X1 = 704, Y0 = 20, Y1 = 270, VMAX = 100;
+    const minus = (s) => s.replace('-', '−');
+    function el(name, attrs, text) {
+      const e = document.createElementNS(NS, name);
+      for (const k in attrs) e.setAttribute(k, attrs[k]);
+      if (text !== undefined) e.textContent = text;
+      return e;
+    }
+    const xOf = (t) => X0 + (X1 - X0) * t / T;
+    const yOf = (v) => (Y0 + Y1) / 2 - (Y1 - Y0) / 2 * v / VMAX;
+    function path(offset) {
+      let d = '';
+      for (let i = 0; i <= 240; i++) {
+        const t = T * i / 240;
+        d += (i ? 'L' : 'M') + xOf(t).toFixed(1) + ' ' + yOf(A * Math.sin(2 * Math.PI * F * t) + offset).toFixed(1);
+      }
+      return d;
+    }
+    function draw() {
+      const off = parseFloat(slider.value);
+      const txt = minus((off > 0 ? '+' : '') + off.toFixed(1)) + ' V';
+      out.textContent = txt;
+      slider.setAttribute('aria-valuetext', txt);
+      plot.replaceChildren();
+      for (const v of [-100, -50, 50, 100]) {
+        plot.append(el('line', { class: 'grid', x1: X0, x2: X1, y1: yOf(v), y2: yOf(v) }));
+        plot.append(el('text', { x: X0 - 8, y: yOf(v) + 4, 'text-anchor': 'end' }, minus(String(v))));
+      }
+      plot.append(el('line', { class: 'zero', x1: X0, x2: X1, y1: yOf(0), y2: yOf(0) }));
+      plot.append(el('text', { x: X0 - 8, y: yOf(0) + 4, 'text-anchor': 'end' }, '0'));
+      plot.append(el('text', { x: X0 + 4, y: Y0 - 6 }, 'volts'));
+      for (const ms of [0, 10, 20, 30]) plot.append(el('text', { x: xOf(ms / 1000), y: Y1 + 20, 'text-anchor': 'middle' }, ms + ' ms'));
+      plot.append(el('path', { class: 'ghost', d: path(0) }));
+      if (Math.abs(off) > 0.05) plot.append(el('line', { class: 'mean', x1: X0, x2: X1, y1: yOf(off), y2: yOf(off) }));
+      plot.append(el('path', { class: 'wave', d: path(off) }));
+      if (Math.abs(off) > 0.05) plot.append(el('text', { class: 't-warn', x: X1 - 4, y: yOf(off) - 6, 'text-anchor': 'end' }, 'average = ' + txt));
+      plot.append(el('text', { class: 't-ac', x: X0 + 8, y: Y0 + 12 }, '71.5 V peak, 60 Hz'));
+      const hi = A + off, lo = -A + off;
+      readout.innerHTML = 'Positive peak: <b>' + minus(hi.toFixed(1)) + ' V</b>. Negative peak: <b>' + minus(lo.toFixed(1)) +
+        ' V</b>. Average over a cycle: <b>' + minus(off.toFixed(1)) + ' V</b>.';
+      for (const k in btns) btns[k].setAttribute('aria-pressed', String(Math.abs(parseFloat(k) - off) < 0.05));
+    }
+    slider.addEventListener('input', draw);
+    for (const k in btns) btns[k].addEventListener('click', () => { slider.value = k; draw(); });
+    draw();
+  </script>
+</body>
+</html>

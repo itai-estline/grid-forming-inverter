@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sources · Grid-Forming Inverter</title>
+  <meta name="description" content="Where the numbers on this site come from: my project notes and files, the outside web sources for the real-world facts, and the fonts and libraries used.">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/detail.css">
+  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }</script>
+  <script type="module" src="js/detail/detail.js"></script>
+</head>
+<body class="detail" data-page="sources">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header" data-site-header></header>
+  <main id="main">
+    <article class="page">
+      <header class="page-head">
+        <p class="eyebrow">Reference</p>
+        <h1>Sources</h1>
+        <p class="lede">Everything about my own design comes from my project notes and files. Everything about the real world comes from the outside sources listed here, each with its publisher and the date I last opened it. This is simulation and packaging design only. No hardware was built.</p>
+        <p class="back-links"><a href="index.html">Back to the journey</a></p>
+      </header>
+
+      <section id="project-notes">
+        <h2>My project notes</h2>
+        <p>These are files in my Obsidian vault. They are listed by file name, not linked, because they are not part of this site.</p>
+        <ul>
+          <li><code>Scrollytelling Brief.md</code>: the checked list of numbers and the framing rules for this site.</li>
+          <li><code>LinkedIn Post Handoff.md</code>: the plain-English summary of the project, with the verified numbers.</li>
+          <li><code>01_Power_System_Basics.md</code>, <code>02_Grid_Following_vs_Grid_Forming.md</code>, <code>03_Grid_Forming_Deep_Dive.md</code>: my theory notes. Their real-world examples had no sources, so I did not reuse them.</li>
+          <li><code>04_MATLAB_Implementation_Guide_Updated.md</code>: building models V1 to V4.</li>
+          <li><code>GridForming_ExtensionsManual_V5_V10.docx.md</code>: the manual for V5 to V13. Where a line is marked corrected or updated, it overrides the earlier text.</li>
+          <li><code>GFI Decision Log.md</code>: decisions D1 to D27, with the final numbers.</li>
+          <li><code>Session Debriefs.md</code>: the log of each working session.</li>
+          <li>Ansys FEA screenshots (temperature of the heatsink and the whole package).</li>
+          <li>Mission thermal results (<code>mission_results.txt</code> and the junction temperature plot).</li>
+          <li>Fusion CAD assembly <code>GFI_Package_Assembly.step</code>.</li>
+          <li>Final model <code>GridFormingInverter_V13.slx</code>, the Simulink and Simscape model.</li>
+        </ul>
+
+        <h3>Reading the source tags</h3>
+        <p>Short tags like <code>V13, D26</code> appear next to numbers across the site. The V is the model version: V13 is the final model, built up from V1 over thirteen versions. The D is the entry in the decision log: D26 is decision 26, which records the two-inverter load-sharing result. A tag like <code>Manual V11</code> points to the section of the extensions manual for that version. A number with no tag from my project comes from an outside source and has a footnote.</p>
+      </section>
+
+      <section id="web-sources">
+        <h2>Web sources</h2>
+        <p>All opened or searched on 14 November 2026. Primary documents come first in each group. Where I could only reach a news report or a search summary, the main page says so.</p>
+
+        <h3>Grid-forming installations</h3>
+        <ul>
+          <li><a href="https://arena.gov.au/projects/hornsdale-power-reserve-upgrade" rel="noopener">Hornsdale Power Reserve Upgrade</a>. ARENA (Australian Renewable Energy Agency). Accessed 14 Nov 2026.</li>
+          <li><a href="https://arena.gov.au/knowledge-bank/hornsdale-power-reserve-virtual-machine-mode-testing-summary-report" rel="noopener">Hornsdale Power Reserve Virtual Machine Mode Testing Summary Report</a>. ARENA. Accessed 14 Nov 2026.</li>
+          <li><a href="https://www.pv-magazine-australia.com/2022/07/27/hornsdale-big-battery-begins-providing-inertia-grid-services-at-scale-in-world-first" rel="noopener">Hornsdale big battery begins providing inertia grid services at scale in world first</a>. pv magazine Australia (trade press), 27 Jul 2022. Accessed 14 Nov 2026.</li>
+          <li><a href="https://www.zenobe.com/?p=17752" rel="noopener">Zenobe powers up a world first solution and Europe's biggest battery at Blackhillock, Scotland</a>. Zenobe, 3 Mar 2025. Accessed 14 Nov 2026.</li>
+          <li><a href="https://www.zenobe.com/battery-project-development/blackhillock-bess/" rel="noopener">Blackhillock, Scotland</a>. Zenobe project page. Accessed 14 Nov 2026.</li>
+          <li><a href="https://www.ess-news.com/2026/01/14/grid-forming-inverters-significantly-enhance-grid-stability-us-national-lab-finds/" rel="noopener">Grid-forming inverters significantly enhance grid stability, US national lab finds</a>. ESS News (trade press), 14 Jan 2026. Accessed 14 Nov 2026.</li>
+          <li><a href="https://www.nrel.gov/news/detail/features/2026/with-inverters-an-island-adapts-to-the-changing-physics-of-power-grids" rel="noopener">With Inverters, An Island Adapts to Changing Physics of Power Grids</a>. NREL (National Laboratory of the Rockies), 2026. Accessed 14 Nov 2026 (not opened, seen in search results).</li>
+        </ul>
+
+        <h3>Grid codes and standards</h3>
+        <ul>
+          <li><a href="https://aemo.com.au/-/media/files/initiatives/primary-frequency-response/2023/gfm-voluntary-spec.pdf?la=en" rel="noopener">Voluntary Specification for Grid-forming Inverters</a>, version 1.0, 29 May 2023. AEMO. Accessed 14 Nov 2026.</li>
+          <li><a href="https://neso.energy/industry-information/codes/gc/modifications/gc0137-minimum-specification-required-provision-gb-grid-forming-gbgf-capability-formerly-virtual-synchronous-machinevsm-capability" rel="noopener">GC0137 Minimum specification required for provision of GB Grid Forming (GBGF) capability</a>. NESO. Accessed 14 Nov 2026.</li>
+          <li><a href="https://entsoe.eu/news/2025/11/04/entso-e-publishes-phase-ii-technical-report-on-grid-forming-requirements" rel="noopener">ENTSO-E publishes Phase II technical report on grid forming requirements</a>, 4 Nov 2025. ENTSO-E. Accessed 14 Nov 2026.</li>
+          <li><a href="https://www.nerc.com/comm/RSTC_Reliability_Guidelines/White_Paper_Grid_Forming_Technology.pdf" rel="noopener">White Paper: Grid Forming Functional Specifications for BPS-Connected Battery Energy Storage Systems</a>, Sep 2023. NERC. Accessed 14 Nov 2026.</li>
+          <li><a href="https://transgrid.com.au/media/fctbpgif/2406-transgrid_stable-voltage-waveform-support-specifications-for-grid-forming-bess.pdf" rel="noopener">Stable voltage waveform support specifications for grid-forming BESS</a>, 2024. Transgrid. Accessed 14 Nov 2026 (seen in search results).</li>
+        </ul>
+
+        <h3>Background facts</h3>
+        <ul>
+          <li><a href="https://www.nrel.gov/docs/fy21osti/73476.pdf" rel="noopener">Research Roadmap on Grid-Forming Inverters</a>, NREL/TP-5D00-73476, Nov 2020. NREL. Accessed 14 Nov 2026 (abstract level; the document did not open from my tools).</li>
+          <li><a href="https://www.ercot.com/files/docs/2018/04/04/Inertia_Basic_Concepts_Impacts_On_ERCOT_v0.pdf" rel="noopener">Inertia: Basic Concepts and Impacts on the ERCOT Grid</a>, 2018. ERCOT. Accessed 14 Nov 2026 (seen in search results).</li>
+          <li><a href="https://www.energy.gov/sites/default/files/2023-12/National%20Transmission%20Needs%20Study%20-%20Final_2023.12.1.pdf" rel="noopener">National Transmission Needs Study</a>, Dec 2023. US Department of Energy. Accessed 14 Nov 2026 (60 Hz, seen in search results).</li>
+          <li><a href="https://www.eia.gov/todayinenergy/detail.php?id=3990" rel="noopener">Electric systems respond quickly to the sudden loss of supply or demand</a>. US EIA. Accessed 14 Nov 2026 (seen in search results).</li>
+          <li><a href="https://www.energy.gov/cmei/water/glossary-hydropower-terms" rel="noopener">Glossary of Hydropower Terms</a> (black start). US Department of Energy. Accessed 14 Nov 2026 (seen in search results).</li>
+        </ul>
+      </section>
+
+      <section id="parts">
+        <h2>Representative parts (shapes only)</h2>
+        <p>My design gives the passive parts only by value (2 mH, 20 µF, 220 µF at 450 V). To draw them in 3D I borrowed the dimensions of one real part per type. These are shape references only. I did not select, order or evaluate them, and their sizes and positions in the model follow my Fusion assembly.</p>
+        <div class="table-wrap"><table class="data">
+          <caption>Parts used for representative dimensions</caption>
+          <thead><tr><th>In the model</th><th>Reference part</th><th>What I took from it</th><th>Datasheet</th></tr></thead>
+          <tbody>
+            <tr><td>Filter inductor (toroid)</td><td>Magnetics Kool Mµ core 0077443A7</td><td>Core size and wound height. The CAD envelope (outside diameter 58 mm, 30 mm tall) is kept.</td><td><a href="https://www.mag-inc.com/Media/Magnetics/Datasheets/0077443A7.pdf" rel="noopener">mag-inc.com</a></td></tr>
+            <tr><td>Filter capacitor (box film)</td><td>TDK B32776G0206, 20 µF</td><td>Box of 42 × 30 × 45 mm, the same as the CAD body. A size match only, not a voltage-rating choice.</td><td><a href="https://sy-dep-epc-lpc.web.cern.ch/components/datasheets/epc-lpc%20(converters)/MKP_B32774_778_Film-Capacitor_EPCOS-TDK.pdf" rel="noopener">TDK B32774 to B32778 series</a></td></tr>
+            <tr><td>DC-link capacitor (snap-in electrolytic)</td><td>TDK B43505C5227M, 220 µF, 450 V</td><td>Sleeve, vent and terminal details. The real part is 35 mm tall; my CAD envelope is 50 mm tall and I kept the CAD size.</td><td><a href="https://sy-dep-epc-lpc.web.cern.ch/components/datasheets/epc-lpc%20(converters)/B43504%20(EPCOS).pdf" rel="noopener">TDK B43504 / B43505 series</a></td></tr>
+            <tr><td>IGBT module package</td><td>Infineon IKCM20L60GD (the part in my design)</td><td>36 × 21 mm package outline and pin layout, from the outline drawing of a sibling module in the same package.</td><td><a href="https://www.infineon.com/cms/en/product/power/intelligent-power-modules-ipm/ikcm20l60gd/" rel="noopener">infineon.com</a></td></tr>
+          </tbody>
+        </table></div>
+        <p>The controller board, the current and voltage sensors, the terminal block and the power board are generic shapes. They are typical parts that any real inverter would have, they were not specified in this design, and they carry no part numbers.</p>
+      </section>
+
+      <section id="fonts-libraries">
+        <h2>Fonts and libraries</h2>
+        <ul>
+          <li><strong>three.js</strong>, used for the 3D scenes, under the MIT licence. It is served from this site, not from a CDN.</li>
+          <li><strong>Bodoni Moda</strong>, <strong>Barlow</strong>, <strong>Barlow Condensed</strong> and <strong>DM Mono</strong>, under the SIL Open Font License. They are also served from this site.</li>
+          <li><strong>3D models and HDR environments</strong> were made in Blender for this site.</li>
+          <li>The look of the home page was inspired by another site's style. Nothing from it (assets, text, fonts, branding) is reproduced here.</li>
+        </ul>
+      </section>
+
+      <nav class="pager"><a rel="prev" href="what-went-wrong.html">What went wrong, and how I found it</a><a rel="next" href="index.html">Back to the journey</a></nav>
+    </article>
+  </main>
+  <footer class="site-footer" data-site-footer></footer>
+</body>
+</html>

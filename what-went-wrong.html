@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What went wrong, and how I found it · Grid-Forming Inverter</title>
+  <meta name="description" content="Six mistakes from my grid-forming inverter project: what I saw, what I assumed, how I found the real cause, the fix, and the numbers.">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/detail.css">
+  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }</script>
+  <script type="module" src="js/detail/detail.js"></script>
+</head>
+<body class="detail" data-page="what-went-wrong">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header" data-site-header></header>
+  <main id="main">
+    <article class="page">
+      <header class="page-head">
+        <p class="eyebrow">How it was built · Six mistakes</p>
+        <h1>What went wrong, and how I found it</h1>
+        <p class="lede">Six things in this project were wrong for a while, some of them for months. Each section below has the same parts: what I saw, what I assumed, how I found the real cause, the fix, and the numbers. All of it is simulation and design work. No hardware was built.</p>
+        <p class="back-links"><a href="index.html#s16">Back to the journey, station 16</a> · <a href="build-log.html">Build log, V1 to V13</a></p>
+      </header>
+
+      <section id="limit-cycle">
+        <h2>1. The "loss of synchronisation" that was not one</h2>
+        <p><strong>What I saw.</strong> Two inverters share one bus. I added a load too large for the pair, so both ran into their 10 A current limit. Two seconds later the two controllers reported different frequencies, 59.80 Hz and 59.74 Hz, and reactive power was circulating between them.<sup class="fn"><a href="#fn-1" id="fnref-1">1</a></sup></p>
+        <p><strong>What I assumed.</strong> I wrote it down as a loss of synchronisation: the limited inverters can no longer push power according to their angle, so their virtual rotors drift apart. That is a real effect, and it fitted the two numbers I was looking at.</p>
+        <p><strong>How I found the real cause.</strong> A longer run showed that nothing was drifting. Everything was cycling, with a period of about 0.12 s: the limiters swung between 0.42 and 1.0, and the current between 2 A and 18 A.<sup class="fn"><a href="#fn-2" id="fnref-2">2</a></sup> A frequency difference is the rate of change of a phase difference, so I integrated it:</p>
+        <p class="eq">Δ<var>θ</var>(<var>t</var>) = ∫ 2π·(<var>f</var><sub>1</sub> − <var>f</var><sub>2</sub>) d<var>t</var></p>
+        <p>If the 0.06 Hz split were real, the phase would grow by 0.06 × 360° = 21.6° every second and never stop. It stayed between −7° and −9°.<sup class="fn"><a href="#fn-3" id="fnref-3">3</a></sup> The inverters were in step the whole time. My two frequencies were a snapshot of an oscillation: two integrating limiters fighting through the shared bus. One cuts its voltage, the other picks up the current, then they swap.</p>
+        <p>One test settled it. I froze the swing equation while a unit was limiting, which held the two frequencies together, and the cycle was still there, with current peaks up to 24 A.<sup class="fn"><a href="#fn-4" id="fnref-4">4</a></sup></p>
+        <p><strong>The fix.</strong> A different kind of limiter. The controller subtracts a virtual resistance drop, <var>R</var><sub>v</sub>·<var>i</var>, from its voltage command, and <var>R</var><sub>v</sub> grows with the over-current. It behaves like a resistor that appears only when needed, so the two units stop trading the current back and forth.</p>
+        <div class="table-wrap"><table class="data">
+          <caption>Overload test (extra 4.2 Ω load at 0.5 s), last 0.5 s of a 3 s run</caption>
+          <thead><tr><th></th><th>Integrating limiters</th><th>Frequencies forced equal</th><th>Virtual resistance (V12)</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Inverter 2 current, limit 10 A</th><td>swings 4.9 to 14.9 A</td><td>swings 3.6 to 22 A</td><td>10.14 ± 0.15 A</td></tr>
+            <tr><th scope="row">Limit cycle</th><td>yes, about 0.12 s</td><td>yes, about 0.16 s</td><td>none</td></tr>
+            <tr><th scope="row">Phase difference</th><td>−7° to −9°</td><td>−15.3°, fixed</td><td>−4.5° to −7°</td></tr>
+            <tr><th scope="row">Power delivered</th><td>about 1.1 kW, cycling</td><td>0.66 kW</td><td>2.56 kW</td></tr>
+          </tbody>
+        </table></div>
+        <p>Sources for the table: decision log D9 and D11.<sup class="fn"><a href="#fn-5" id="fnref-5">5</a></sup> I also changed the pass criterion. Instead of comparing two frequency readings, I now require the phase difference to stay bounded (less than 5° of drift per second) and the 0.1 s average of the frequency difference to stay under 0.05 Hz. V12 gave 1.9° and 0.038 Hz.<sup class="fn"><a href="#fn-3" id="fnref-3b">3</a></sup></p>
+        <figure class="img"><img src="assets/img/v12_ab_compare.webp" alt="Three stacked plots from MATLAB for the overload test. Top: the phase difference between the two inverters stays between about minus 5 and minus 10 degrees for all three limiter options. Middle: circulating reactive power. Bottom: the current of inverter 2, which swings widely for two options and sits on the 10 A line for the third." loading="lazy" width="940" height="790"><figcaption>The evidence. Top panel: the integrated phase difference for the original limiters ("base"), the forced-equal-frequency test ("A") and the virtual resistance ("B"). None of them runs away. Bottom panel: only B holds the current on the 10 A line.</figcaption></figure>
+      </section>
+
+      <section id="backwards">
+        <h2>2. The April result that looked fine and was backwards</h2>
+        <p><strong>What I saw.</strong> In April the two-inverter model (V10) seemed to pass. The inverters have different damping, <var>D</var> = 150 and <var>D</var> = 300, and after the load step they carried different amounts of power in a ratio that was not far from 2.</p>
+        <aside class="note warn"><strong>Wrong numbers, shown only so the correction makes sense.</strong> The April validation recorded P1 ≈ 380 W and P2 ≈ 230 W, a ratio of about 1.65, and my note said the inverter with less damping takes more load. All of this is wrong. Please do not quote it.</aside>
+        <p><strong>What I assumed.</strong> I wanted roughly 2 to 1, I got something near it, and I explained away the rest: I wrote that <var>D</var> "affects damping, not pure gain", so an inexact ratio was to be expected.<sup class="fn"><a href="#fn-6" id="fnref-6">6</a></sup></p>
+        <p><strong>How I found the real cause.</strong> In November I did the steady state by hand. When the frequency has settled, d<var>ω</var>/d<var>t</var> = 0 and the swing equation becomes</p>
+        <p class="eq"><var>P</var> = <var>P</var><sub>0</sub> − <var>D</var>·(<var>ω</var> − <var>ω</var><sub>0</sub>)</p>
+        <p>Both inverters sit at the same frequency, so the one with the larger <var>D</var> must change its power more, and exactly twice as much here. My April result had the smaller <var>D</var> carrying more. The theory was fine. The model had two bugs.<sup class="fn"><a href="#fn-6" id="fnref-6b">6</a></sup></p>
+        <p>First, the phase angle was computed as <var>θ</var> = <var>ω</var>·<var>t</var>. That is only right if the frequency never changes. With droop or a swing equation the frequency moves, and then d<var>θ</var>/d<var>t</var> = <var>ω</var> + <var>t</var>·d<var>ω</var>/d<var>t</var>: every small change in commanded frequency is multiplied by the elapsed time and shows up as a phase jump.<sup class="fn"><a href="#fn-7" id="fnref-7">7</a></sup></p>
+<p>Second, the load step was backwards. The Simscape breaker opens when its control signal is high. My step went from 0 to 1 at 0.5 s, so the extra load was connected from the start and removed at 0.5 s. I had been reading "after the step" as the heavy case when it was the light one. The saved file also had a 1 Ω base load where I meant 8.4 Ω, and a 6 A limit that was below the load demand.<sup class="fn"><a href="#fn-8" id="fnref-8">8</a></sup></p>
+        <p><strong>The fix.</strong> The phase now comes from an integrator, <var>θ</var> = ∫2π<var>f</var> d<var>t</var>. The breaker step is reversed, the base load is 8.4 Ω and the limit is 10 A. The fixes live in copies of the models, and the April files are untouched.</p>
+        <div class="table-wrap"><table class="data">
+          <caption>Load sharing after the fixes. Theory says ΔP₂ / ΔP₁ = 2 exactly.</caption>
+          <thead><tr><th>Check</th><th>Result</th><th>Source</th></tr></thead>
+          <tbody>
+            <tr><td>Hand calculation against the corrected model, 1 Ω test load</td><td>P₁ = 554 W by hand, 553 W simulated</td><td>Manual V10, 2026-11-11</td></tr>
+            <tr><td>Corrected V10, load step inside the current rating</td><td>404.0 → 702.5 W and 557.5 → 1155.2 W, both 59.837 → 59.520 Hz, ratio 2.003</td><td>D5</td></tr>
+            <tr><td>Final model V13, same step</td><td>385.2 → 670.0 W and 520.3 → 1090.0 W, ratio 2.000</td><td>V13, D26</td></tr>
+          </tbody>
+        </table></div>
+        <p>The first corrected run gave 2.02, but it used a step large enough to push inverter 2 into its current limit, so I repeated it with a smaller step.<sup class="fn"><a href="#fn-9" id="fnref-9">9</a></sup></p>
+      </section>
+
+      <section id="dc-offset">
+        <h2>3. A hidden 17.7 V DC offset, in V7, V10 and V12</h2>
+        <p><strong>What I saw.</strong> Nothing, which is the problem. The output looked like three sine waves. I only looked closer because I was checking something else: whether the voltage controller was saturated.</p>
+        <p><strong>What I assumed.</strong> That a PI controller on each phase could only help, because the integral part removes steady error. I had even written that the controller was pinned at its limit, which turned out to be wrong too: it was not saturated, just weak.<sup class="fn"><a href="#fn-10" id="fnref-10">10</a></sup></p>
+        <p><strong>How I found the real cause.</strong> I logged the controller output and the capacitor voltages for 0.3 s and looked at the averages. A sine should average to zero. These did not: the controller output had a mean of +0.089 on phase a and −0.044 on phases b and c. On the capacitors that was +17.7 V DC on phase a and −8.9 V on b and c, in both inverters.<sup class="fn"><a href="#fn-11" id="fnref-11">11</a></sup></p>
+        <p>The cause is the integrator. It integrates a sine-shaped error of amplitude <var>A</var>, starting at whatever phase <var>φ</var><sub>0</sub> the sine has when the simulation begins:</p>
+        <p class="eq"><var>K</var><sub>i</sub>·∫ <var>A</var>·sin(<var>ω</var><var>t</var> + <var>φ</var><sub>0</sub>) d<var>t</var> = (<var>A</var>·<var>K</var><sub>i</sub> / <var>ω</var>)·[cos <var>φ</var><sub>0</sub> − cos(<var>ω</var><var>t</var> + <var>φ</var><sub>0</sub>)]</p>
+        <p>The second term is a sine. The first is a constant that never goes away. With <var>A</var> = 346, <var>K</var><sub>i</sub> = 0.1 and <var>ω</var> = 377 rad/s it is 0.092·cos <var>φ</var><sub>0</sub>. Phase a starts at 0°, where the cosine is 1. Phases b and c start at ∓120°, where it is −0.5. That is the +0.089 and the −0.044, including the factor of minus one half. The feedback was far too weak to pull it back.<sup class="fn"><a href="#fn-11" id="fnref-11b">11</a></sup></p>
+        <figure class="widget" data-illustrative id="int-widget">
+          <svg class="d3" viewBox="0 0 600 280" role="img" aria-label="Plot of a sine error and the output of an integrator fed with it. The integrator output is a sine sitting on a constant offset that depends on the starting phase." style="width:100%;height:auto">
+            <path class="ln thin c-muted" d="M70 30 V250"/>
+            <path class="ln thin c-muted" d="M70 140 H585"/>
+            <path class="ln thin dot c-muted" d="M70 95 H585 M70 185 H585"/>
+            <text class="lbl mono c-muted" x="64" y="99" text-anchor="end">+0.092</text>
+            <text class="lbl mono c-muted" x="64" y="144" text-anchor="end">0</text>
+            <text class="lbl mono c-muted" x="64" y="189" text-anchor="end">−0.092</text>
+            <text class="lbl sm c-muted" x="585" y="268" text-anchor="end">three cycles of 60 Hz</text>
+            <path id="iw-sine" class="ln thin c-muted" d=""/>
+            <path id="iw-int" class="ln wide c-ctl" d=""/>
+            <path id="iw-mean" class="ln dash c-warn" d=""/>
+            <text id="iw-meanlbl" class="lbl sm c-warn" x="580" y="90" text-anchor="end"></text>
+            <text class="lbl sm c-muted" x="80" y="268">grey: the sine error · magenta: integrator output · dashed: its average</text>
+          </svg>
+          <p><label for="iw-phi">Phase of the sine when the integrator starts: <output id="iw-phiout" for="iw-phi">0°</output></label><br>
+            <input id="iw-phi" type="range" min="-180" max="180" step="5" value="0" style="width:100%"></p>
+          <p><button type="button" data-phi="0">Phase a, 0°</button> <button type="button" data-phi="-120">Phase b, −120°</button> <button type="button" data-phi="120">Phase c, +120°</button></p>
+          <p id="iw-read" aria-live="polite">Offset = 0.092 × cos(0°) = +0.092 of full modulation, about +18.4 V DC at 200 V per unit.</p>
+          <figcaption>An integrator fed with a sine. Its output is a sine plus a constant, and the constant depends only on where the sine was when the integrator started. This is the formula above with my values (A = 346, K<sub>i</sub> = 0.1, 60 Hz), not model data. The model measured +17.7 V on phase a and −8.9 V on phases b and c.</figcaption>
+        </figure>
+        <script type="module">
+          const A = 346, Ki = 0.1, w = 2 * Math.PI * 60, K = A * Ki / w;   // 0.092 in modulation units
+          const X0 = 70, X1 = 585, Y0 = 140, PX = 45, T = 3 / 60, N = 240;
+          const $ = (id) => document.getElementById(id);
+          const slider = $('iw-phi');
+          function draw() {
+            const deg = Number(slider.value), phi = deg * Math.PI / 180;
+            let s = '', u = '';
+            for (let k = 0; k <= N; k++) {
+              const t = T * k / N, x = X0 + (X1 - X0) * k / N;
+              const e = Math.sin(w * t + phi);
+              const ui = Math.cos(phi) - Math.cos(w * t + phi);          // integrator output / K
+              s += (k ? 'L' : 'M') + x.toFixed(1) + ' ' + (Y0 - e * 22).toFixed(1);
+              u += (k ? 'L' : 'M') + x.toFixed(1) + ' ' + (Y0 - ui * PX).toFixed(1);
+            }
+            const off = K * Math.cos(phi), ym = Y0 - Math.cos(phi) * PX;
+            $('iw-sine').setAttribute('d', s);
+            $('iw-int').setAttribute('d', u);
+            $('iw-mean').setAttribute('d', 'M' + X0 + ' ' + ym.toFixed(1) + ' H' + X1);
+            const lbl = $('iw-meanlbl');
+            lbl.setAttribute('y', (ym - 6).toFixed(1));
+            const sign = off >= 0 ? '+' : '−';
+            lbl.textContent = 'average ' + sign + Math.abs(off).toFixed(3);
+            const degTxt = (deg < 0 ? '−' : deg > 0 ? '+' : '') + Math.abs(deg) + '°';
+            $('iw-phiout').textContent = degTxt;
+            $('iw-read').textContent = 'Offset = 0.092 × cos(' + degTxt + ') = ' + sign + Math.abs(off).toFixed(3) +
+              ' of full modulation, about ' + sign + Math.abs(off * 200).toFixed(1) + ' V DC at 200 V per unit.';
+          }
+          slider.addEventListener('input', draw);
+          document.querySelectorAll('#int-widget button[data-phi]').forEach((b) =>
+            b.addEventListener('click', () => { slider.value = b.dataset.phi; draw(); }));
+          draw();
+        </script>
+        <p>There was a clue in April that I did not follow. My notes for the dq-frame version (V8) list "zero DC offset" as a result and compare it with V7.<sup class="fn"><a href="#fn-12" id="fnref-12">12</a></sup> In the dq frame the PI controllers work on steady values, not on sines, so this cannot happen there. I took it as a nice property of V8 and did not ask why V7 had an offset to begin with. V10 and V12 were built on V7 and inherited it.</p>
+        <p><strong>The fix.</strong> No integrator. The V13 voltage loop is a feed-forward plus a proportional term, <var>u</var> = <var>K</var><sub>ff</sub>·<var>r</var> + <var>K</var><sub>p</sub>·(<var>r</var> − <var>y</var>), with <var>K</var><sub>ff</sub> = 1/200 = 0.005 and <var>K</var><sub>p</sub> = 0.002.</p>
+        <div class="results">
+          <div class="result"><span class="value">17.7 V → 0.000 V</span><span class="label">DC offset on phase a, before and after</span><span class="src">D13, D14</span></div>
+          <div class="result"><span class="value">−0.12 %</span><span class="label">voltage error at base load with the new loop</span><span class="src">V13, D14</span></div>
+          <div class="result"><span class="value">964 → 909 W</span><span class="label">total base-load power, once the DC part was gone</span><span class="src">D14</span></div>
+          <div class="result"><span class="value">4.4 A → 0.01 A</span><span class="label">mean phase current during a fault, V12 then V13</span><span class="src">D15, D17</span></div>
+        </div>
+        <p>The offset had been pushing about 2 A of direct current through the 8.4 Ω load in every run.<sup class="fn"><a href="#fn-11" id="fnref-11c">11</a></sup> More on the loop itself: <a href="voltage-loop.html">The voltage loop</a>.</p>
+      </section>
+
+      <section id="circulating-q">
+        <h2>4. Better voltage control made parallel operation worse</h2>
+        <p><strong>What I saw.</strong> With the voltage loop repaired, I reran the overload test expecting less reactive power to circulate between the two inverters. In V12 it was 181 VAR. With the better loop it was 308 VAR. My target was under 50.<sup class="fn"><a href="#fn-13" id="fnref-13">13</a></sup></p>
+        <p><strong>What I assumed.</strong> That the circulating power came from a voltage loop too weak to make the voltage droop work, so a real loop plus droop would fix it.</p>
+        <p><strong>How I found the real cause.</strong> I switched the voltage droop off as a control experiment. The circulating power went up to 872 VAR, so the droop was helping and was not the problem.<sup class="fn"><a href="#fn-13" id="fnref-13b">13</a></sup> The problem was what the new loop had removed. In V12 the voltage was barely regulated, so the 2 mH filter inductor (0.75 Ω at 60 Hz) sat between the two sources and soaked up small voltage differences. In V13 the capacitor voltage itself is held, so the stiff source now sits after the inductor. Between the two units only the short ties are left, 0.05 Ω and 0.075 Ω of reactance each. A few volts of mismatch across that little impedance drives hundreds of VAR.</p>
+<p><strong>The fix.</strong> Put an impedance back, in the controller. Each inverter subtracts a virtual reactance drop from its voltage command at all times. With 0.75 Ω on both, the circulating power fell to 51 VAR. Inverter 2 carries twice the current of inverter 1, so with equal reactances its drop is twice as large. Giving it half the reactance, 0.375 Ω, makes the two drops equal, and the result is 11 VAR.<sup class="fn"><a href="#fn-14" id="fnref-14">14</a></sup></p>
+        <figure class="chart" data-chart='{"type":"bar","unit":"VAR","categories":["V12","V13, stiff voltage loop","V13, equal virtual reactance","V13 final, scaled reactance"],"series":[{"name":"Circulating reactive power in overload","tone":"ac","values":[181,308,51,11]}],"target":{"value":50,"label":"target < 50"}}'>
+          <figcaption>Circulating reactive power in the overload test: 181, 308, 51 and 11 VAR. Sources: D18, D21, D23, D26.</figcaption>
+        </figure>
+        <p>One more thing went wrong inside this fix. I had added a 10 ms low-pass filter to calm the virtual resistance. In the fault test that filter caused a growing oscillation near 35 Hz, with current peaks of 12.7 A. I removed it, and the fault current settled cleanly on 10.0 A.<sup class="fn"><a href="#fn-14" id="fnref-14b">14</a></sup></p>
+        <aside class="note warn"><strong>A number that was wrong.</strong> An earlier table of mine gave 293 VAR for V12 and concluded that the virtual resistance made circulating power worse than the old limiters. When I recomputed every run from the saved data with one script, V12 came out at 181 VAR, the lowest of the four options I had compared. The old figure could not be traced, because the script that produced it was never saved. 181 VAR is the correct value.<sup class="fn"><a href="#fn-15" id="fnref-15">15</a></sup></aside>
+        <p>More on this: <a href="parallel.html">Two inverters in parallel, and virtual impedance</a>.</p>
+      </section>
+
+      <section id="hand-vs-fea">
+        <h2>5. The hand calculation said 0.39 K/W. The FEA said 0.47.</h2>
+        <p><strong>What I saw.</strong> I sized the heatsink by hand and got 0.39 K/W from heatsink to air. Then I ran a steady-state thermal FEA in Ansys with the heavy-load loss of 77.3 W. The heatsink averaged 63.8 °C, but directly under the power module it reached 76.5 °C.<sup class="fn"><a href="#fn-16" id="fnref-16">16</a></sup></p>
+        <p><strong>What I assumed.</strong> The hand calculation treats the heatsink base as one temperature. That is the usual textbook assumption, and I did not question it.</p>
+        <p><strong>How I found the real cause.</strong> The FEA showed it directly. The module is 36 × 21 mm on a 120 × 100 mm base, so the heat enters through a small patch and has to spread sideways through the aluminium before it reaches the outer fins. That costs temperature. Measured from the 40 °C ambient:</p>
+        <p class="eq">(76.5 − 40) / 77.3 = 0.47 K/W under the module,&nbsp;&nbsp; (63.8 − 40) / 77.3 = 0.31 K/W on average</p>
+        <p>The hot spot is about 13 K above the average, and the module sits exactly on it. Against my hand number, the heatsink is about 20 % worse where it matters.<sup class="fn"><a href="#fn-16" id="fnref-16b">16</a></sup></p>
+        <figure class="chart" data-chart='{"type":"bar","unit":"K/W","categories":["Hand calculation, uniform base","FEA, heatsink average","FEA, under the module"],"series":[{"name":"Heatsink to air","tone":"dc","values":[0.39,0.31,0.47]}]}'>
+          <figcaption>Heatsink-to-air thermal resistance three ways. The module sees the last bar. Sources: manual V11, D1.</figcaption>
+        </figure>
+        <p><strong>The fix.</strong> I put 0.47 K/W into the thermal model, which is the conservative choice, and reran the mission. The heavy-load junction temperature went from 104.5 °C to 110.6 °C. It is still under the 125 °C design limit, with 14 K of margin, and the fan-failure case is 119.2 °C.<sup class="fn"><a href="#fn-17" id="fnref-17">17</a></sup> The FEA pictures and the full thermal path are on <a href="packaging-thermal.html#hand-vs-fea">Packaging and thermal</a>.</p>
+      </section>
+
+      <section id="missing-delay">
+        <h2>6. One missing 10 µs delay: 23 minutes instead of under 3</h2>
+        <p><strong>What I saw.</strong> The two-inverter model took between 8 and 23 minutes per run, and it printed warnings about an algebraic loop.<sup class="fn"><a href="#fn-18" id="fnref-18">18</a></sup></p>
+        <p><strong>What I assumed.</strong> That it was slow because of its small solver step, and that the warning was harmless. My April notes call it "expected and benign".<sup class="fn"><a href="#fn-18" id="fnref-18b">18</a></sup></p>
+        <p><strong>How I found the real cause.</strong> My own build instructions for the current limiter say to put a one-sample delay between the limiter and the point where it scales the modulation. When I opened the saved models in November, the delay was not there. It had never been placed.<sup class="fn"><a href="#fn-19" id="fnref-19">19</a></sup> Without it, the limiter output changes the modulation, the modulation changes the current, and the current changes the limiter output, all at the same instant. The solver has to iterate around that loop at every time step.</p>
+<p><strong>The fix.</strong> One Unit Delay block, with a sample time of 1e-5 s, in each limiter.</p>
+        <div class="table-wrap"><table class="data">
+          <caption>Run time before and after adding the delay</caption>
+          <thead><tr><th>Model</th><th>Before</th><th>After</th><th>Source</th></tr></thead>
+          <tbody>
+            <tr><td>V10_fixed, two inverters</td><td>1386 s (23 min)</td><td>143 s (under 3 min)</td><td>D3</td></tr>
+            <tr><td>V6_fixed</td><td>89 s, 3 warnings</td><td>29 s, 0 warnings</td><td>D3</td></tr>
+            <tr><td>V7_fixed</td><td>44 s, 2 warnings</td><td>11 s, 0 warnings</td><td>D3</td></tr>
+          </tbody>
+        </table></div>
+        <p>I then made the same mistake once more. The first version of the virtual resistance in V12 fed the measured current straight into the modulation, and a 3 s run had not finished after 35 minutes. One delay per phase fixed that as well.<sup class="fn"><a href="#fn-20" id="fnref-20">20</a></sup></p>
+      </section>
+
+      <section id="habits">
+        <h2>What I do differently now</h2>
+        <p>These six have things in common. In most of them the first reading of a plot was wrong, and the way out was one more logged signal or one calculation by hand. So:</p>
+        <ul>
+          <li>I check the phase difference, not two frequency readings, before I say anything about synchronisation.</li>
+          <li>I work out the steady state by hand before I trust a plot that roughly agrees with what I hoped for.</li>
+          <li>I log signals inside the controller and look at their averages, not only at the output waveform.</li>
+          <li>I score every run with the same saved script, so a number can always be reproduced.</li>
+          <li>I treat a solver warning as a bug until I know why it is there.</li>
+        </ul>
+      </section>
+
+      <section class="footnotes" aria-label="Sources for this page"><h2>Sources for this page</h2>
+        <ol>
+          <li id="fn-1">Decision log D5 (first overload run on V10_cl, with the original diagnosis). <a href="#fnref-1" aria-label="Back to text">↩</a></li>
+          <li id="fn-2">Decision log D7, <code>compare_v12_base_4p2.txt</code>. <a href="#fnref-2" aria-label="Back to text">↩</a></li>
+          <li id="fn-3">Decision log D9. Extensions manual, V12 Step 1 and Step 4, corrections of 2026-11-13. The 21.6° per second is my arithmetic from the two frequencies in D5. <a href="#fnref-3" aria-label="Back to text">↩</a></li>
+          <li id="fn-4">Decision log D8, <code>compare_v12_A_4p2.txt</code>. <a href="#fnref-4" aria-label="Back to text">↩</a></li>
+          <li id="fn-5">V12. Decision log D9 and D11, <code>compare_v12_B_4p2.txt</code>, figure <code>v12_AB_compare.png</code>. <a href="#fnref-5" aria-label="Back to text">↩</a></li>
+          <li id="fn-6">Extensions manual, V10 validation (April text) and the correction of 2026-11-11 below it. <a href="#fnref-6" aria-label="Back to text">↩</a></li>
+          <li id="fn-7">Extensions manual, V7 Step 4, correction of 2026-11-11 (phase-angle bug in V4 to V7 and V10). <a href="#fnref-7" aria-label="Back to text">↩</a></li>
+          <li id="fn-8">Extensions manual, V10 Step 8, corrections of 2026-11-11. <a href="#fnref-8" aria-label="Back to text">↩</a></li>
+          <li id="fn-9">Extensions manual, V10, corrected results of 2026-11-11 and update of 2026-11-13. Decision log D5. <a href="#fnref-9" aria-label="Back to text">↩</a></li>
+          <li id="fn-10">Decision log D12 (correction of D9 and D11). <a href="#fnref-10" aria-label="Back to text">↩</a></li>
+          <li id="fn-11">Decision log D13, <code>probe_v13_base.txt</code>. <a href="#fnref-11" aria-label="Back to text">↩</a></li>
+          <li id="fn-12">Extensions manual, V8 objective and validation. Session debrief, April 20, 2026. <a href="#fnref-12" aria-label="Back to text">↩</a></li>
+          <li id="fn-13">Decision log D21, <code>compare_v13pi_4p2.txt</code> and <code>compare_v13noKq_4p2.txt</code>. Target from the extensions manual, V13 Step 4. <a href="#fnref-13" aria-label="Back to text">↩</a></li>
+          <li id="fn-14">Decision log D22 to D26 (virtual reactance sweep, the low-pass filter and its removal). Final value: V13, D26. <a href="#fnref-14" aria-label="Back to text">↩</a></li>
+          <li id="fn-15">Decision log D18 (recomputed with <code>gfi_metrics.m</code>). <a href="#fnref-15" aria-label="Back to text">↩</a></li>
+          <li id="fn-16">Extensions manual, V11 Step 3 (hand calculation) and Step 5 (FEA, update of 2026-11-12). Decision log D1. <a href="#fnref-16" aria-label="Back to text">↩</a></li>
+          <li id="fn-17">Decision log D1, <code>mission_results.txt</code>. The 104.5 °C figure is from the extensions manual, V11 Step 2. <a href="#fnref-17" aria-label="Back to text">↩</a></li>
+          <li id="fn-18">Extensions manual, V10 Step 8, note added 2026-11-11. Session debrief, April 21, 2026. <a href="#fnref-18" aria-label="Back to text">↩</a></li>
+          <li id="fn-19">Decision log D3, <code>health_log_fixed.txt</code>. Extensions manual, V6 Step 3, correction of 2026-11-13. <a href="#fnref-19" aria-label="Back to text">↩</a></li>
+          <li id="fn-20">Decision log D9. Extensions manual, V12 Step 3, correction of 2026-11-13. <a href="#fnref-20" aria-label="Back to text">↩</a></li>
+        </ol>
+      </section>
+
+      <nav class="pager"><a rel="prev" href="build-log.html">Build log, V1 to V13</a><a rel="next" href="sources.html">Sources</a></nav>
+    </article>
+  </main>
+  <footer class="site-footer" data-site-footer></footer>
+</body>
+</html>

@@ -1,0 +1,23 @@
+# Published to GitHub Pages: only the web files.
+# Everything else in this folder (notes, QA screenshots, build tools, Blender files) stays local.
+
+# notes and planning
+*.md
+!README.md
+
+# local-only folders
+node_modules/
+qa/
+_preflight/
+tools/
+blender/
+dev/
+
+# npm files (only used for local checks)
+package.json
+package-lock.json
+
+# OS / editor clutter
+.DS_Store
+Thumbs.db
+desktop.ini

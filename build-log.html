@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Build log, V1 to V13 Â· Grid-Forming Inverter</title>
+  <meta name="description" content="The thirteen model versions of my grid-forming inverter, what each one added, what it showed, and how the versions branch.">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/detail.css">
+  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }</script>
+  <script type="module" src="js/detail/detail.js"></script>
+</head>
+<body class="detail" data-page="build-log">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header" data-site-header></header>
+  <main id="main">
+    <article class="page">
+      <header class="page-head">
+        <p class="eyebrow">How it was built Â· Station 16</p>
+        <h1>Build log, V1 to V13</h1>
+        <p class="lede">I built the controller in thirteen steps. Each version adds one capability to the one before it and is saved as a new file, so a working model is never overwritten. This page lists what each version added and the result that told me it worked, or that it did not.</p>
+        <p class="back-links"><a href="index.html#s16">Back to the journey, station 16</a></p>
+      </header>
+
+      <section id="overview">
+        <h2>How the build went</h2>
+        <p>Everything here is simulation and design work in MATLAB R2026a, Simulink and Simscape Electrical, with Ansys Mechanical and Autodesk Fusion for the packaging step. No hardware was built.</p>
+        <p>V1 to V10 were built in April 2026. In November 2026 I came back, ran a health check on all ten models, and found that some April results were wrong. The fixes, the packaging work (V11) and the last two controller versions (V12, V13) are from that second round.<sup class="fn"><a href="#fn-1" id="fnref-1">1</a></sup> The stories behind the fixes are on <a href="what-went-wrong.html">What went wrong, and how I found it</a>.</p>
+        <div class="results">
+          <div class="result"><span class="value">13</span><span class="label">model versions, V1 to V13</span><span class="src">Handoff</span></div>
+          <div class="result"><span class="value">2.000</span><span class="label">Î”Pâ‚‚ / Î”Pâ‚ after the load step, final model</span><span class="src">V13, D26</span></div>
+          <div class="result"><span class="value">11 VAR</span><span class="label">circulating reactive power in overload</span><span class="src">V13, D26</span></div>
+          <div class="result"><span class="value">10.0 A</span><span class="label">fault current held at the limit</span><span class="src">V13, D27</span></div>
+          <div class="result"><span class="value">110.6 Â°C</span><span class="label">IGBT junction at heavy load, limit 125 Â°C</span><span class="src">V11, D1</span></div>
+        </div>
+      </section>
+
+      <section id="tree">
+        <h2>How the versions connect</h2>
+        <p>The versions are not one straight line. V1 to V7 are. After V7 the work splits. The final model, V13, sits on the line V7 â†’ V10 â†’ V12 â†’ V13. V8 (dq-frame control) and V9 (PLL grid sync) branch off V7 and are not inside V13. V11 is the packaging and thermal design, which is hardware sizing and not another control model.</p>
+</section>
+
+      <section id="v1-v4">
+        <h2>V1 to V4: a controlled voltage source</h2>
+
+        <article class="vcard" id="v1"><header><span class="ver">V1</span><h3>Bare power stage</h3></header>
+          <p>A 400 V DC source, a three-phase average-value converter, an LC filter of 2 mH and 20 ÂµF per phase, and an 8.4 Î© resistive load. There is no controller yet. A constant on the modulation input was only there to prove that the circuit solves.<sup class="fn"><a href="#fn-2" id="fnref-2">2</a></sup> The converter is an average-value model, so the simulation never contains individual switching pulses.</p>
+          <p class="key">Key result: the circuit runs for 0.1 s with the solver settings every later version keeps (ode23t, variable step).<sup class="fn"><a href="#fn-2" id="fnref-2b">2</a></sup></p>
+          <p>More: <a href="power-stage.html">Power stage and filter</a></p>
+        </article>
+
+        <article class="vcard" id="v2"><header><span class="ver">V2</span><h3>Open-loop sine reference</h3></header>
+          <p>A small MATLAB function makes three sine references, 120Â° apart, at 60 Hz, and feeds them to the converter. Nothing is measured and nothing is corrected. This is also where the line <code>theta = omega * t</code> first appears. At a fixed 60 Hz it is correct. Later it became a bug.<sup class="fn"><a href="#fn-2" id="fnref-2c">2</a></sup></p>
+          <p class="key">Key result: clean three-phase 60 Hz sine waves at the filter output.<sup class="fn"><a href="#fn-2" id="fnref-2d">2</a></sup></p>
+          <p>More: <a href="power-stage.html#filter">Power stage and filter</a></p>
+        </article>
+
+        <article class="vcard" id="v3"><header><span class="ver">V3</span><h3>Closed-loop voltage</h3></header>
+          <p>One PI controller per phase (P = 0.001, I = 0.1) compares the reference with the measured capacitor voltage. A one-sample delay in each feedback path breaks the algebraic loop.<sup class="fn"><a href="#fn-2" id="fnref-2e">2</a></sup> Much later I found that this loop was far weaker than I believed, and that its integrator put a DC offset on the output. V13 replaced it.<sup class="fn"><a href="#fn-3" id="fnref-3">3</a></sup></p>
+          <p class="key">Key result: stable three-phase output at 60 Hz over a 0.5 s run.<sup class="fn"><a href="#fn-2" id="fnref-2f">2</a></sup></p>
+          <p>More: <a href="voltage-loop.html">The voltage loop</a></p>
+        </article>
+
+        <article class="vcard" id="v4"><header><span class="ver">V4</span><h3>Droop control</h3></header>
+          <p>The model now measures active and reactive power (a three-phase power sensor and a one-cycle moving average) and lets them move the frequency and the voltage: <var>f</var> = <var>f</var><sub>0</sub> âˆ’ <var>K</var><sub>p</sub>Â·<var>P</var> and <var>V</var> = <var>V</var><sub>0</sub> âˆ’ <var>K</var><sub>q</sub>Â·<var>Q</var>, with <var>K</var><sub>p</sub> = 0.00001 Hz/W.<sup class="fn"><a href="#fn-2" id="fnref-2g">2</a></sup> This is the first version that behaves like a grid-forming source: it sets its own frequency and lets the load decide where on the droop line it sits.</p>
+          <p class="key">Key result: 59.9905 Hz with an 8.4 Î© load and 59.9820 Hz with 4.2 Î©. More load, lower frequency.<sup class="fn"><a href="#fn-4" id="fnref-4">4</a></sup></p>
+          <p>More: <a href="inertia-droop.html#droop">Virtual inertia and droop</a></p>
+        </article>
+      </section>
+
+      <section id="v5-v7">
+        <h2>V5 to V7: loads, faults and inertia</h2>
+
+        <article class="vcard" id="v5"><header><span class="ver">V5</span><h3>R-L load: P and Q</h3></header>
+          <p>The load became 8.4 Î© in series with 20 mH, so it draws reactive power as well as active power. That gave the voltage droop something to react to. The load impedance rises from 8.4 Î© to 11.3 Î©, so the active power drops and the frequency moves back toward 60 Hz. Both confused me at first and both are correct.<sup class="fn"><a href="#fn-4" id="fnref-4b">4</a></sup></p>
+          <p class="key">Key result: P â‰ˆ 500 W, Q â‰ˆ 410 VAR, and the voltage command drooped from 346 to about 342 (model units), at about 59.995 Hz.<sup class="fn"><a href="#fn-4" id="fnref-4c">4</a></sup></p>
+          <p>More: <a href="inertia-droop.html#droop">Virtual inertia and droop</a></p>
+        </article>
+
+        <article class="vcard" id="v6"><header><span class="ver">V6</span><h3>Fault ride-through</h3></header>
+          <p>A 0.5 Î© fault is switched onto the output at 0.3 s, and a current limiter scales the modulation down when the measured current is over the limit. In April the limiter visibly cut in and I marked it done. In November I checked the number: scaling by limit / current is not a hard limit, and the fault current settled at 18.3 A against a 6 A limit.<sup class="fn"><a href="#fn-5" id="fnref-5">5</a></sup></p>
+          <p class="key">Key result, after the fix (model V6_cl, an integrating limiter with gain 2): fault current held at 6.02 A, inside Â±10 % of the limit 86 ms after the fault.<sup class="fn"><a href="#fn-5" id="fnref-5b">5</a></sup></p>
+          <p>More: <a href="current-limiting.html">Current limiting and fault ride-through</a></p>
+        </article>
+
+        <article class="vcard" id="v7"><header><span class="ver">V7</span><h3>Virtual synchronous machine</h3></header>
+          <p>The droop block was replaced by the swing equation of a generator, <var>J</var>Â·d<var>Ï‰</var>/d<var>t</var> = <var>P</var><sub>0</sub> âˆ’ <var>P</var> âˆ’ <var>D</var>Â·(<var>Ï‰</var> âˆ’ <var>Ï‰</var><sub>0</sub>), with <var>J</var> = 0.5 and <var>D</var> = 150. This gives the inverter synthetic inertia: the frequency can no longer jump, it has to swing. Two settings took a few tries. <var>D</var> = 10 was not enough damping, and <var>P</var><sub>0</sub> = 0 drove the frequency down to its 54 Hz clamp, so <var>P</var><sub>0</sub> has to match the real load (495.75 W here).<sup class="fn"><a href="#fn-6" id="fnref-6">6</a></sup></p>
+          <p class="key">Key result: a damped oscillation at start-up that settles near 60 Hz, with about 0.011 Hz drift over 1.0 s.<sup class="fn"><a href="#fn-6" id="fnref-6b">6</a></sup></p>
+          <p>More: <a href="inertia-droop.html#vsm">Virtual inertia and droop</a></p>
+        </article>
+      </section>
+
+      <section id="v8-v9">
+        <h2>V8 and V9: the side branch</h2>
+        <p>These two versions start from V7 and go in a different direction. They taught me a lot, but the final model does not contain them, so they are side chapters on this site.</p>
+
+        <article class="vcard" id="v8"><header><span class="ver">V8</span><h3>dq-frame control</h3></header>
+          <p>A Clarke and a Park transform turn the three sine voltages into two steady numbers, <var>V</var><sub>d</sub> and <var>V</var><sub>q</sub>, in a frame that rotates with the output. Two PI controllers then hold steady targets instead of three controllers chasing sines, and an inverse transform takes the result back to three phases. Getting it to work needed a normalising gain and retuned PI gains that the first plan did not have.<sup class="fn"><a href="#fn-7" id="fnref-7">7</a></sup></p>
+          <p class="key">Key result: <var>V</var><sub>d</sub> = 1.0 and <var>V</var><sub>q</sub> = 0.0 after a 2.0 s run, with symmetric sine waves and no DC offset.<sup class="fn"><a href="#fn-7" id="fnref-7b">7</a></sup></p>
+          <p>More: <a href="dq-frame.html">Side chapter: the dq frame (V8)</a></p>
+        </article>
+
+        <article class="vcard" id="v9"><header><span class="ver">V9</span><h3>PLL grid sync</h3></header>
+          <p>Built on V8. An external 60 Hz grid source is added behind a breaker. A PLL measures the grid, a check compares the grid frequency with the inverter frequency, and the breaker closes at 0.5 s. I had planned an angle check as well, but the PLL angle and the inverter angle come from two independent generators, so their difference sweeps through a full turn and cannot be used. The check became frequency only, with a 0.6 Hz window.<sup class="fn"><a href="#fn-8" id="fnref-8">8</a></sup></p>
+          <p class="key">Key result: SYNC OK stayed at 1 for the whole 3.0 s run, and the breaker closed at 0.5 s with a single spike before the voltages settled back to clean sines.<sup class="fn"><a href="#fn-8" id="fnref-8b">8</a></sup></p>
+          <p>More: <a href="pll.html">Side chapter: PLL grid sync (V9)</a></p>
+        </article>
+      </section>
+
+      <section id="v10-v13">
+        <h2>V10 to V13: two inverters, and a box to put one in</h2>
+
+        <article class="vcard" id="v10"><header><span class="ver">V10</span><h3>Two inverters in parallel</h3></header>
+          <p>Branches from V7, not from V9. Two copies of the inverter feed one shared bus, each through a tie of 0.05 Î© and 0.2 mH. They differ only in damping: <var>D</var> = 150 for inverter 1 and 300 for inverter 2, with <var>P</var><sub>0</sub> = 250 W each. There is no communication between them. The April run looked like a pass and was wrong in two ways, which is <a href="what-went-wrong.html#backwards">story 2</a> on the other page.<sup class="fn"><a href="#fn-9" id="fnref-9">9</a></sup></p>
+          <p class="key">Key result (corrected model, load step from 8.4 Î© to two 8.4 Î© loads in parallel): inverter 1 went from 404.0 W to 702.5 W, inverter 2 from 557.5 W to 1155.2 W, both at 59.837 Hz then 59.520 Hz. Î”Pâ‚‚ / Î”Pâ‚ = 2.003.<sup class="fn"><a href="#fn-9" id="fnref-9b">9</a></sup></p>
+          <p>More: <a href="parallel.html">Two inverters in parallel, and virtual impedance</a></p>
+        </article>
+
+        <article class="vcard" id="v11"><header><span class="ver">V11</span><h3>Packaging and thermal</h3></header>
+          <p>Not a control model. I took the currents of the harder-working inverter from V10 and sized one unit of about 1 kW around them: an Infineon IKCM20L60GD power module switched at 10 kHz, a loss and thermal model, a heatsink with a fan, a CAD layout in a 300 Ã— 200 Ã— 130 mm enclosure, and an FEA check of the heatsink. The FEA showed the heatsink is 0.47 K/W right under the module, not the 0.39 K/W of my hand calculation, and I used the FEA value.<sup class="fn"><a href="#fn-10" id="fnref-10">10</a></sup></p>
+          <p class="key">Key result: IGBT junction 110.6 Â°C at heavy load and 119.2 Â°C with a failed fan, both under the 125 Â°C design limit.<sup class="fn"><a href="#fn-10" id="fnref-10b">10</a></sup></p>
+          <p>More: <a href="packaging-thermal.html">Packaging and thermal</a></p>
+        </article>
+
+        <article class="vcard" id="v12"><header><span class="ver">V12</span><h3>Current limiting in parallel</h3></header>
+          <p>With a load too large for the pair, the two integrating current limiters (one per inverter) fought each other through the shared bus in a slow cycle. I tried three changes. Freezing the swing equation while limited did not stop it. An inductive virtual impedance made it worse. A virtual resistance did work: the controller subtracts <var>R</var><sub>v</sub>Â·<var>i</var> from its voltage command, and <var>R</var><sub>v</sub> grows with the over-current.<sup class="fn"><a href="#fn-11" id="fnref-11">11</a></sup></p>
+          <p class="key">Key result (overload): inverter 2 held at 10.14 Â± 0.15 A against a 10 A limit, no limit cycle, 2.56 kW delivered, and normal sharing unchanged at 2.003. Still open at this point: 181 VAR circulating between the units, and a bolted fault that settled at 11.4 A.<sup class="fn"><a href="#fn-11" id="fnref-11b">11</a></sup></p>
+          <p>More: <a href="current-limiting.html">Current limiting and fault ride-through</a></p>
+        </article>
+
+        <article class="vcard" id="v13"><header><span class="ver">V13</span><h3>Voltage loop and virtual impedance</h3></header>
+          <p>The final model. The voltage loop was rebuilt in volts: a feed-forward of 1/200 plus a proportional gain of 0.002, and no integrator. The virtual resistance got an integral term so that a fault settles exactly on the limit. A virtual reactance, 0.75 Î© on inverter 1 and 0.375 Î© on inverter 2, was added so that the two units stop pushing reactive power at each other.<sup class="fn"><a href="#fn-12" id="fnref-12">12</a></sup></p>
+          <p class="key">Key result: Î”Pâ‚‚ / Î”Pâ‚ = 2.000 for the load step (385.2 W to 670.0 W and 520.3 W to 1090.0 W, 59.857 Hz to 59.554 Hz), 11 VAR circulating in overload, and 9.999 A and 10.001 A in a bolted fault. Voltage error at base load: âˆ’0.12 %.<sup class="fn"><a href="#fn-12" id="fnref-12b">12</a></sup></p>
+          <p>More: <a href="voltage-loop.html">The voltage loop</a> and <a href="parallel.html">Two inverters in parallel</a></p>
+        </article>
+      </section>
+
+      <section id="fixed">
+        <h2>The _fixed models, and why the April files were left alone</h2>
+        <p>The November health check ran all ten April models. All of them simulated, but V4 to V7 and V10 computed the phase angle as <var>Î¸</var> = <var>Ï‰</var>Â·<var>t</var>, which is only right when the frequency never changes, and the V10 test had further mistakes in its load step.<sup class="fn"><a href="#fn-13" id="fnref-13">13</a></sup></p>
+        <p>I fixed these in copies, not in the originals. I decided not to port the fixes back (decision D2): the April files are the record of what I had in April, and the "before" results in my report refer to them. Changing them would erase the evidence of the bugs.<sup class="fn"><a href="#fn-14" id="fnref-14">14</a></sup> So from V10 on, the solid line in the tree really runs through the corrected copies: V10_fixed â†’ V10_cl â†’ V12 â†’ V13.</p>
+        <div class="table-wrap"><table class="data">
+          <caption>The corrected working set</caption>
+          <thead><tr><th>Model</th><th>What changed against the April file</th><th>Source</th></tr></thead>
+          <tbody>
+            <tr><td>V4_fixed to V7_fixed</td><td>Phase is the integral of frequency, <var>Î¸</var> = âˆ«2Ï€<var>f</var> d<var>t</var>, wrapped at 2Ï€</td><td>Manual V7, correction</td></tr>
+            <tr><td>V10_fixed</td><td>Same phase fix. Base load 8.4 Î© (the saved file had 1 Î©), load-step breaker reversed, current limit raised from 6 A to 10 A</td><td>Manual V10, corrections</td></tr>
+            <tr><td>V6_fixed, V7_fixed, V10_fixed</td><td>A division guard and the one-sample delay in the limiter that the April models were missing. V4_fixed to V7_fixed then run with zero warnings</td><td>D3</td></tr>
+            <tr><td>V6_cl, V10_cl</td><td>Integrating current limiter that settles on the limit</td><td>D4</td></tr>
+          </tbody>
+        </table></div>
+        <aside class="note">Every decision from the November round is numbered D1 to D27 in my decision log. Where this site quotes a result, the footnote names the version and the decision it comes from.</aside>
+      </section>
+
+      <section class="footnotes" aria-label="Sources for this page"><h2>Sources for this page</h2>
+        <ol>
+          <li id="fn-1">Session debriefs: April 20 and 21, 2026 (V5 to V10) and November 11 to 13, 2026 (health check, V11, V12, V13). <a href="#fnref-1" aria-label="Back to text">â†©</a></li>
+          <li id="fn-2">V1 to V4 build guide, <code>04_MATLAB_Implementation_Guide_Updated.md</code>. <a href="#fnref-2" aria-label="Back to text">â†©</a></li>
+          <li id="fn-3">Decision log D12 and D13 (the V3-style PI loop acts almost like a fixed gain, and its integrator leaves a DC offset). <a href="#fnref-3" aria-label="Back to text">â†©</a></li>
+          <li id="fn-4">Extensions manual, V5: prerequisites (V4 droop check) and validation. Session debrief, April 20, 2026. <a href="#fnref-4" aria-label="Back to text">â†©</a></li>
+          <li id="fn-5">Extensions manual, V6, corrections of 2026-11-13. Decision log D4, <code>v6_cl_sweep.txt</code>. <a href="#fnref-5" aria-label="Back to text">â†©</a></li>
+          <li id="fn-6">Extensions manual, V7, Step 3 and validation. <a href="#fnref-6" aria-label="Back to text">â†©</a></li>
+          <li id="fn-7">Extensions manual, V8, Steps 4 and 5 and validation. <a href="#fnref-7" aria-label="Back to text">â†©</a></li>
+          <li id="fn-8">Extensions manual, V9, Step 5 and validation. Session debrief, April 21, 2026. <a href="#fnref-8" aria-label="Back to text">â†©</a></li>
+          <li id="fn-9">Extensions manual, V10, Steps 3 and 4 and the update of 2026-11-13. Decision log D5, <code>compare_v10fixed_8p4.txt</code>. <a href="#fnref-9" aria-label="Back to text">â†©</a></li>
+          <li id="fn-10">V11, D1. Extensions manual, V11. <code>mission_results.txt</code>. <a href="#fnref-10" aria-label="Back to text">â†©</a></li>
+          <li id="fn-11">V12. Decision log D7 to D11 (options and overload result), D15 (bolted fault), D18 (circulating reactive power, recomputed). <a href="#fnref-11" aria-label="Back to text">â†©</a></li>
+          <li id="fn-12">V13. Decision log D13 and D14 (voltage loop, DC offset), D16 and D17 (PI virtual resistance), D26 (scaled virtual reactance, <code>compare_v13xvs_8p4.txt</code>), D27 (<code>compare_v13final_fault.txt</code>). <a href="#fnref-12" aria-label="Back to text">â†©</a></li>
+          <li id="fn-13">Extensions manual, V7 Step 4 and V10 Step 8, corrections of 2026-11-11. Session debrief, 2026-11-11. <a href="#fnref-13" aria-label="Back to text">â†©</a></li>
+          <li id="fn-14">Decision log D2. <a href="#fnref-14" aria-label="Back to text">â†©</a></li>
+        </ol>
+      </section>
+
+      <nav class="pager"><a rel="prev" href="pll.html">Side chapter: PLL grid sync (V9)</a><a rel="next" href="what-went-wrong.html">What went wrong, and how I found it</a></nav>
+    </article>
+  </main>
+  <footer class="site-footer" data-site-footer></footer>
+</body>
+</html>

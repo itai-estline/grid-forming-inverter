@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inverter 3D Viewer</title>
+  <meta name="description" content="Rotatable 3D model of my grid-forming inverter packaging design, for embedding in my portfolio.">
+  <!--
+    Standalone, embeddable 3D viewer of the packaged inverter (assets/models/inverter/unit.glb).
+    Made for the Figma Sites portfolio page: embed this page's URL in an Embed block.
+    To open the box, press near a lid screw and circle around it twice: all screws unscrew and the lid lifts off.
+    Keyboard: arrows rotate, + / - zoom, 0 resets, O unscrews / puts the lid back.
+    URL options:  ?lid=open        start with the lid off
+                  ?bg=transparent  no background colour (the host page shows through)
+                  ?spin=0          no slow auto-rotation before the first drag
+  -->
+  <style>
+    @font-face { font-family: "Barlow"; src: url("assets/fonts/barlow-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+    @font-face { font-family: "Barlow"; src: url("assets/fonts/barlow-latin-500-normal.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+    :root {
+      --bg: #0a0f1c; --panel: #111a2e; --line: #2a3858;
+      --ink: #ece7e1; --ink-2: #b8bfcc; --ink-3: #8690a3; --ac: #3fe0ff;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body { background: var(--bg); color: var(--ink); font-family: "Barlow", system-ui, sans-serif; -webkit-user-select: none; user-select: none; }
+    body.clear { background: transparent; }
+    #stage { position: fixed; inset: 0; touch-action: none; cursor: grab; }
+    #stage:active { cursor: grabbing; }
+    #stage.near { cursor: pointer; }
+    #stage.turning { cursor: none; }
+    #stage canvas { display: block; width: 100%; height: 100%; outline: none; }
+    #poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity .6s ease; }
+    #poster.gone { opacity: 0; pointer-events: none; }
+
+    /* progress ring around the screw being turned */
+    #ring { position: absolute; left: 0; top: 0; width: 96px; height: 96px; margin: -48px 0 0 -48px; pointer-events: none; opacity: 0; transition: opacity .25s ease; }
+    #ring.show { opacity: .55; }
+    #ring.active { opacity: 1; }
+    #ring .track { fill: none; stroke: rgba(236, 231, 225, .25); stroke-width: 3; }
+    #ring .bar { fill: none; stroke: var(--ac); stroke-width: 4; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 48px 48px; }
+    #ring .dot { fill: var(--ac); }
+
+    .hint {
+      position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 10px; padding: 10px 18px; border-radius: 999px;
+      background: rgba(10, 15, 28, .82); color: var(--ink); font-size: 15px; font-weight: 500;
+      pointer-events: none; transition: opacity .5s ease; max-width: calc(100% - 32px); line-height: 1.35; text-align: left;
+    }
+    .hint svg { flex: none; }
+    .hint.gone { opacity: 0; }
+    .tools { position: absolute; right: 16px; top: 16px; display: flex; gap: 8px; }
+    .tools button {
+      font: 500 15px/1 "Barlow", system-ui, sans-serif; color: var(--ink);
+      background: rgba(17, 26, 46, .85); border: 1px solid var(--line); border-radius: 8px;
+      min-width: 40px; height: 40px; padding: 0 14px; cursor: pointer;
+    }
+    .tools button:hover { border-color: var(--ac); }
+    .tools button:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+    #lidBtn[hidden], #labelBtn[hidden] { display: none; }
+
+    /* hotspot dots on the components, and the description card they open */
+    #labels { position: absolute; inset: 0; pointer-events: none; }
+    .spot { position: absolute; left: 0; top: 0; width: 30px; height: 30px; margin: -15px 0 0 -15px; pointer-events: auto; cursor: pointer; transition: opacity .3s ease; will-change: transform; }
+    .spot::before { content: ""; position: absolute; inset: 9px; border-radius: 50%; background: var(--ac); box-shadow: 0 0 0 2px rgba(10, 15, 28, .9); transition: inset .15s ease; }
+    .spot::after { content: ""; position: absolute; inset: 5px; border-radius: 50%; border: 1.5px solid var(--ac); animation: dotPulse 2.6s ease-out infinite; }
+    .spot.on::before { inset: 7px; }
+    .spot.hid, #labels.off .spot { opacity: 0; pointer-events: none; }
+    .spot[hidden] { display: none; }
+    @keyframes dotPulse { 0% { transform: scale(.6); opacity: .8; } 100% { transform: scale(1.5); opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) { .spot::after { animation: none; opacity: .5; } }
+    #card {
+      position: absolute; left: 0; top: 0; width: 270px; padding: 12px 14px 13px; border-radius: 8px;
+      background: rgba(10, 15, 28, .93); border: 1px solid var(--line); pointer-events: none;
+      opacity: 0; transition: opacity .18s ease; will-change: transform;
+    }
+    #card.show { opacity: 1; }
+    #card h3 { margin: 0; font-size: 16px; font-weight: 500; line-height: 1.25; color: var(--ink); }
+    #card .spec { margin-top: 3px; font-size: 13px; color: var(--ac); }
+    #card p { margin: 8px 0 0; font-size: 14px; line-height: 1.45; color: var(--ink-2); }
+    #card .tier { margin-top: 7px; font-size: 12px; color: var(--ink-3); }
+    @media (max-width: 480px) { #card { width: 230px; } #card p { font-size: 13px; } }
+    @media (max-width: 480px) { .hint { font-size: 14px; bottom: 16px; } }
+  </style>
+  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }</script>
+</head>
+<body>
+  <div id="stage" role="img" aria-label="3D model of my grid-forming inverter packaging design. Drag to rotate. To open it, press near a lid screw and circle around it twice. Keyboard: arrow keys rotate, plus and minus zoom, 0 resets, O opens or closes the lid.">
+    <img id="poster" src="assets/img/unit_render_closed.png" alt="Render of the inverter enclosure" draggable="false">
+    <div id="labels" aria-hidden="true"></div>
+    <div id="card" role="tooltip"><h3></h3><div class="spec"></div><p></p><div class="tier"></div></div>
+    <svg id="ring" viewBox="0 0 96 96" aria-hidden="true">
+      <circle class="track" cx="48" cy="48" r="36"/>
+      <circle class="bar" cx="48" cy="48" r="36" stroke-dasharray="0 999"/>
+      <circle class="dot" cx="48" cy="48" r="4"/>
+    </svg>
+  </div>
+  <div class="hint" id="hint">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12a8 8 0 0 1 14.5-4.6M20 12a8 8 0 0 1-14.5 4.6" stroke="#3fe0ff" stroke-width="1.8" stroke-linecap="round"/><path d="M18.8 3.5v4h-4M5.2 20.5v-4h4" stroke="#3fe0ff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span id="hintText">Loading the 3D model</span>
+  </div>
+  <div class="tools">
+    <button type="button" id="labelBtn" aria-pressed="true">Hide dots</button>
+    <button type="button" id="lidBtn" hidden>Put the lid back</button>
+    <button type="button" id="zin" aria-label="Zoom in" title="Zoom in">+</button>
+    <button type="button" id="zout" aria-label="Zoom out" title="Zoom out">−</button>
+    <button type="button" id="reset" aria-label="Reset the view" title="Reset the view">↺</button>
+  </div>
+
+  <script type="module">
+    const params = new URLSearchParams(location.search);
+    if (params.get('bg') === 'transparent') document.body.classList.add('clear');
+    const startOpen = params.get('lid') === 'open';
+    const allowSpin = params.get('spin') !== '0' && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const isTouch = matchMedia('(pointer: coarse)').matches;
+
+    const stage = document.getElementById('stage');
+    const poster = document.getElementById('poster');
+    const hint = document.getElementById('hint');
+    const hintText = document.getElementById('hintText');
+    const lidBtn = document.getElementById('lidBtn');
+    const ring = document.getElementById('ring');
+    const ringBar = ring.querySelector('.bar');
+    const RING_LEN = 2 * Math.PI * 36;
+
+    const TEXT = {
+      closed: isTouch
+        ? 'Drag to rotate. To open it, press near a screw on the lid and circle around it twice.'
+        : 'Drag to rotate. To open it, press near a screw on the lid and circle around it twice.',
+      turning: 'Keep circling…',
+      open: isTouch ? 'Drag to rotate. Tap a dot to see what each part does.' : 'Drag to rotate. Hover a dot or a part to see what it does.'
+    };
+
+    function fail(msg) {
+      hintText.textContent = 'Still image (3D view not available)';
+      document.querySelector('.tools').hidden = true;
+      console.warn('[viewer]', msg);
+    }
+
+    let THREE, GLTFLoader, MeshoptDecoder, OrbitControls, RoomEnvironment;
+    try {
+      THREE = await import('three');
+      ({ GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js'));
+      ({ MeshoptDecoder } = await import('three/addons/libs/meshopt_decoder.module.js'));
+      ({ OrbitControls } = await import('three/addons/controls/OrbitControls.js'));
+      ({ RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js'));
+    } catch (e) { fail(e); throw e; }
+
+    let renderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    } catch (e) { fail(e); throw e; }
+    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    renderer.setClearColor(0x000000, 0);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.95;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    const canvas = renderer.domElement;
+    canvas.tabIndex = 0;
+    stage.insertBefore(canvas, ring);
+
+    const scene = new THREE.Scene();
+    const root = new THREE.Group();
+    scene.add(root);
+
+    /* ---------- lighting: dim ambient reflections, one shadow-casting key light ---------- */
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environmentIntensity = 0.42;
+    const key = new THREE.DirectionalLight(0xfff1e0, 2.6);
+    key.position.set(-1.6, 3.2, 1.4);
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.bias = -0.0004;
+    key.shadow.normalBias = 0.015;
+    key.shadow.radius = 4;
+    const sc = key.shadow.camera;
+    sc.left = -1.3; sc.right = 1.3; sc.top = 1.3; sc.bottom = -1.3; sc.near = 0.5; sc.far = 7;
+    const rim = new THREE.DirectionalLight(0x9fd8ff, 0.7);
+    rim.position.set(3, 1.2, -3.5);
+    scene.add(key, rim, new THREE.HemisphereLight(0xdfe8ff, 0x0a0f1c, 0.18));
+
+    /* ---------- model ---------- */
+    const loader = new GLTFLoader();
+    loader.setMeshoptDecoder(MeshoptDecoder);
+    let gltf;
+    try {
+      gltf = await loader.loadAsync('assets/models/inverter/unit.glb');
+    } catch (e) { fail(e); throw e; }
+    const model = gltf.scene;
+    root.add(model);
+
+    // centre and scale to a unit sphere (same as the site's part viewers)
+    const box = new THREE.Box3().setFromObject(root);
+    const sphere = box.getBoundingSphere(new THREE.Sphere());
+    const k = 1 / sphere.radius;
+    root.scale.setScalar(k);
+    root.position.copy(sphere.center).multiplyScalar(-k);
+    root.updateMatrixWorld(true);
+
+    root.traverse(o => {
+      if (!o.isMesh) return;
+      o.castShadow = true;
+      o.receiveShadow = true;
+      // anisotropy without tangents renders as NaN noise (see BUILD_NOTES)
+      for (const m of [].concat(o.material)) {
+        if (m && m.anisotropy && !(o.geometry.attributes.tangent && o.geometry.attributes.uv)) { m.anisotropy = 0; m.needsUpdate = true; }
+      }
+    });
+
+    // ground that only shows the shadow
+    const unitBox = new THREE.Box3().setFromObject(root);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), new THREE.ShadowMaterial({ opacity: 0.45 }));
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = unitBox.min.y - 0.002;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    /* ---------- lid and screws ---------- */
+    const lid = model.getObjectByName('enclosure_lid');
+    const modelScrews = model.getObjectByName('screws');
+    const lidBox = lid ? new THREE.Box3().setFromObject(lid) : unitBox.clone();
+    const lidW = lidBox.max.x - lidBox.min.x;
+    const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+    // find the lid screw positions from the model's own screw geometry (same idea as js/machine/index.js)
+    const pts = [];
+    if (modelScrews) {
+      const v = V(), cell = lidW * 0.004, cells = new Map();
+      modelScrews.traverse(o => {
+        if (!o.isMesh || !o.geometry.attributes.position) return;
+        const pa = o.geometry.attributes.position;
+        for (let i = 0; i < pa.count; i++) {
+          v.fromBufferAttribute(pa, i).applyMatrix4(o.matrixWorld);
+          if (v.y < lidBox.min.y - lidW * 0.002) continue;
+          const kk = Math.round(v.x / cell) + ':' + Math.round(v.z / cell);
+          let c = cells.get(kk); if (!c) { c = { x: 0, z: 0, n: 0, y: -1e9 }; cells.set(kk, c); }
+          c.x += v.x; c.z += v.z; c.n++; c.y = Math.max(c.y, v.y);
+        }
+      });
+      for (const c of cells.values()) {
+        const p = V(c.x / c.n, c.y, c.z / c.n);
+        const near = pts.find(q => Math.hypot(q.x - p.x, q.z - p.z) < lidW * 0.03);
+        if (near) near.y = Math.max(near.y, p.y); else pts.push(p);
+      }
+    }
+    if (pts.length < 2 || pts.length > 12) {
+      pts.length = 0;
+      for (const [fx, fz] of [[0.04, 0.06], [0.96, 0.06], [0.04, 0.94], [0.96, 0.94]])
+        pts.push(V(lidBox.min.x + fx * lidW, lidBox.max.y, lidBox.min.z + fz * (lidBox.max.z - lidBox.min.z)));
+    }
+    if (modelScrews) modelScrews.visible = false;
+
+    const mm = lidW / 303;   // model units per millimetre (the lid is 303 mm wide)
+
+    /* ---------- missing terminal block body ----------
+       unit.glb has the terminal block's screws, wire openings and clamp pins but no housing,
+       so they float about 7 mm over the board. Add a plain housing under them. */
+    const { applyUnitFixes } = await import('./js/core/unit-fix.js');
+    applyUnitFixes(THREE, model);
+
+    /* ---------- lid screws: M4 pan head, Phillips recess, threaded shank ---------- */
+    const steel = new THREE.MeshStandardMaterial({ color: 0xd4dae2, metalness: 1, roughness: 0.32, envMapIntensity: 2.4 });
+    const recessMat = new THREE.MeshStandardMaterial({ color: 0x15181e, metalness: 0.6, roughness: 0.6 });
+    const P = (r, y) => new THREE.Vector2(r * mm, y * mm);
+    // pan head: flat underside, rounded shoulder, slightly domed top (8 mm across, 3 mm tall)
+    const headProfile = [P(0, 0), P(4.0, 0), P(4.0, 1.3), P(3.85, 2.0), P(3.45, 2.55), P(2.9, 2.9), P(2.4, 3.0), P(0, 3.0)];
+    const headG = new THREE.LatheGeometry(headProfile, 40);
+    // threaded shank: 0.7 mm pitch, 10 mm long, with a pointed tip
+    const thread = [P(0, 0)];
+    thread.push(P(1.55, 0));
+    for (let y = 0; y > -9.3; y -= 0.7) { thread.push(P(2.0, y - 0.35)); thread.push(P(1.55, y - 0.7)); }
+    thread.push(P(1.1, -10)); thread.push(P(0, -10.3));
+    const shankG = new THREE.LatheGeometry(thread.reverse(), 18);
+    // Phillips cross: two crossed slots sunk into the dome, plus a shallow cone in the middle
+    const slotG = new THREE.BoxGeometry(3.9 * mm, 0.06 * mm, 0.8 * mm);   // flush on the flat top, reads as a recess
+    const coneG = new THREE.CircleGeometry(0.75 * mm, 20);
+    const screws = pts.map(p => {
+      const g = new THREE.Group();
+      const head = new THREE.Mesh(headG, steel);
+      const shank = new THREE.Mesh(shankG, steel);
+      const s1 = new THREE.Mesh(slotG, recessMat); s1.position.y = 3.02 * mm;
+      const s2 = s1.clone(); s2.rotation.y = Math.PI / 2;
+      const cone = new THREE.Mesh(coneG, recessMat); cone.position.y = 3.06 * mm; cone.rotation.x = -Math.PI / 2;
+      [head, shank, s1, s2, cone].forEach(m => { m.castShadow = true; m.receiveShadow = true; });
+      g.add(head, shank, s1, s2, cone);
+      g.position.set(p.x, lidBox.max.y, p.z);   // underside of the head sits on the lid
+      g.userData.y0 = lidBox.max.y;
+      g.userData.spin = Math.random() * Math.PI;
+      scene.add(g);
+      return g;
+    });
+
+    /* ---------- materials that fade: the lid (when lifted off) and the box walls (see-through once open) ---------- */
+    function fadeable(node) {
+      const list = [];
+      if (!node) return list;
+      node.traverse(o => {
+        if (!o.isMesh) return;
+        o.material = Array.isArray(o.material) ? o.material.map(m => m.clone()) : o.material.clone();
+        for (const m of [].concat(o.material)) list.push({ m, mesh: o });
+      });
+      return list;
+    }
+    function setOpacity(list, a) {
+      const t = a < 0.999;
+      for (const { m, mesh } of list) {
+        if (m.transparent !== t) { m.transparent = t; m.needsUpdate = true; }
+        m.opacity = a;
+        m.depthWrite = !t;
+        mesh.castShadow = a > 0.75;
+      }
+    }
+    const lidMats = fadeable(lid);
+    const wallMats = fadeable(model.getObjectByName('enclosure_base'));
+    const WALL_MIN = 0.28;
+
+    // lid lift
+    const LIFT = 0.45;
+    const lidHome = lid ? lid.position.clone() : null;
+    const lidUp = lid ? (() => { const w = lid.getWorldPosition(V()); w.y += LIFT; return lid.parent.worldToLocal(w); })() : null;
+
+    /* ---------- open / close sequence ----------
+       opening: the visitor's two turns raise the screws (progress), the screws spin out and leave (removal),
+                then the lid lifts and fades (lidT) while the walls turn see-through.
+       closing: the reverse, in order: lid comes back down, then the screws arrive, then they screw in. */
+    const TURNS = 2;
+    let progress = 0, removal = 0, lidT = 0;
+    let mode = 'closed';            // closed | opening | open | closing
+    const opened = () => mode === 'opening' || mode === 'open';
+    const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    function setOpen(now) {
+      if (now) {
+        mode = 'opening';
+        progress = 1;
+        hintText.textContent = TEXT.open;
+        hint.classList.remove('gone');
+        setTimeout(() => { if (mode === 'open') hint.classList.add('gone'); }, 5000);
+      } else {
+        mode = 'closing';
+        lidBtn.hidden = true;
+      }
+    }
+    if (startOpen) { progress = 1; removal = 1; lidT = 1; mode = 'open'; }
+
+    function applyParts(shownProgress) {
+      const spin = -(shownProgress + removal) * TURNS * 2 * Math.PI;
+      const leave = 1 - ss(0.6, 1, removal);
+      for (const g of screws) {
+        g.position.y = g.userData.y0 + shownProgress * 7 * mm + removal * removal * 0.3;
+        g.rotation.y = g.userData.spin + spin;
+        g.scale.setScalar(Math.max(0.0001, leave));
+        g.visible = leave > 0.01;
+      }
+      if (lid) {
+        lid.position.lerpVectors(lidHome, lidUp, ss(0, 0.55, lidT));
+        const a = 1 - ss(0.25, 1, lidT);
+        setOpacity(lidMats, a);
+        lid.visible = a > 0.005;
+      }
+      setOpacity(wallMats, 1 - (1 - WALL_MIN) * ss(0.35, 1, lidT));
+    }
+
+    /* ---------- camera ---------- */
+    const fov = 30;
+    const camera = new THREE.PerspectiveCamera(fov, 1, 0.05, 50);
+    const controls = new OrbitControls(camera, canvas);
+    controls.enablePan = false;
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.09;
+    controls.rotateSpeed = 0.9;
+    controls.zoomSpeed = 0.7;
+    controls.autoRotate = allowSpin;
+    controls.autoRotateSpeed = 0.7;
+    controls.minPolarAngle = 0.15;
+    controls.maxPolarAngle = Math.PI / 2 - 0.04;   // stay above the floor so the shadow reads
+
+    let fitDist = 4;
+    function fit() {
+      const w = Math.max(1, stage.clientWidth), h = Math.max(1, stage.clientHeight);
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      const vHalf = THREE.MathUtils.degToRad(fov / 2);
+      const hHalf = Math.atan(Math.tan(vHalf) * camera.aspect);
+      fitDist = 1.04 / Math.sin(Math.min(vHalf, hHalf));
+      controls.minDistance = fitDist * 0.4;
+      controls.maxDistance = fitDist * 1.6;
+      camera.near = fitDist / 60; camera.far = fitDist * 6;
+      camera.updateProjectionMatrix();
+    }
+    function home() {
+      const az = THREE.MathUtils.degToRad(35), el = THREE.MathUtils.degToRad(30);
+      camera.position.set(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)).multiplyScalar(fitDist);
+      controls.target.set(0, 0, 0);
+      controls.update();
+    }
+    fit(); home();
+
+    let touched = false;
+    function took() {
+      if (touched) return;
+      touched = true;
+      controls.autoRotate = false;
+    }
+    function dolly(f) {
+      took();
+      const off = camera.position.clone().sub(controls.target);
+      off.setLength(THREE.MathUtils.clamp(off.length() * f, controls.minDistance, controls.maxDistance));
+      camera.position.copy(controls.target).add(off);
+    }
+    function orbit(dt, dp) {
+      took();
+      const off = camera.position.clone().sub(controls.target);
+      const s = new THREE.Spherical().setFromVector3(off);
+      s.theta += dt; s.phi = THREE.MathUtils.clamp(s.phi + dp, controls.minPolarAngle, controls.maxPolarAngle);
+      camera.position.copy(controls.target).add(off.setFromSpherical(s));
+    }
+    controls.addEventListener('start', took);
+
+    /* ---------- the unscrew gesture ---------- */
+    const tmp = V();
+    function screenOf(g) {
+      tmp.copy(g.position); tmp.y = g.userData.y0 + 2.6 * mm;
+      tmp.project(camera);
+      const r = stage.getBoundingClientRect();
+      return { x: (tmp.x * 0.5 + 0.5) * r.width, y: (-tmp.y * 0.5 + 0.5) * r.height, z: tmp.z };
+    }
+    const GRAB = isTouch ? 70 : 56;   // px: how close "near a screw" is
+    function nearestScrew(px, py) {
+      if (mode !== 'closed' || progress >= 1) return null;
+      let best = null;
+      for (const g of screws) {
+        const s = screenOf(g);
+        if (s.z > 1) continue;
+        const d = Math.hypot(s.x - px, s.y - py);
+        if (d < GRAB && (!best || d < best.d)) best = { g, d, x: s.x, y: s.y };
+      }
+      return best;
+    }
+    function placeRing(x, y) { ring.style.transform = `translate(${x}px, ${y}px)`; }
+    function drawRing() { ringBar.setAttribute('stroke-dasharray', `${(progress * RING_LEN).toFixed(1)} 999`); }
+
+    let turn = null;  // { id, cx, cy, last, accum }
+    function local(e) { const r = stage.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+
+    // capture phase on the stage runs before OrbitControls' own listener on the canvas
+    stage.addEventListener('pointerdown', e => {
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+      const [x, y] = local(e);
+      const hit = nearestScrew(x, y);
+      if (!hit) return;
+      e.stopPropagation();
+      e.preventDefault();
+      took();
+      controls.enabled = false;
+      try { stage.setPointerCapture(e.pointerId); } catch (err) { /* synthetic or already released pointer */ }
+      turn = { id: e.pointerId, cx: hit.x, cy: hit.y, last: Math.atan2(y - hit.y, x - hit.x), accum: progress * TURNS * 2 * Math.PI, sign: 0 };
+      placeRing(hit.x, hit.y); drawRing();
+      ring.classList.add('show', 'active');
+      stage.classList.add('turning');
+      hintText.textContent = TEXT.turning;
+      hint.classList.remove('gone');
+    }, { capture: true });
+
+    stage.addEventListener('pointermove', e => {
+      const [x, y] = local(e);
+      if (turn && e.pointerId === turn.id) {
+        const r = Math.hypot(x - turn.cx, y - turn.cy);
+        const a = Math.atan2(y - turn.cy, x - turn.cx);
+        let d = a - turn.last;
+        if (d > Math.PI) d -= 2 * Math.PI;
+        if (d < -Math.PI) d += 2 * Math.PI;
+        turn.last = a;
+        if (r < 6) return;                         // too close to the centre to read a direction
+        if (!turn.sign && Math.abs(d) > 0.01) turn.sign = Math.sign(d);
+        turn.accum = Math.max(0, turn.accum + d * (turn.sign || 1));
+        progress = Math.min(1, turn.accum / (TURNS * 2 * Math.PI));
+        drawRing();
+        if (progress >= 1) finishTurn(true);
+        return;
+      }
+      if (e.pointerType === 'mouse' && !e.buttons) {
+        const hit = nearestScrew(x, y);
+        stage.classList.toggle('near', !!hit);
+        ring.classList.toggle('show', !!hit);
+        if (hit) { placeRing(hit.x, hit.y); drawRing(); }
+      }
+    });
+    function finishTurn(done) {
+      if (!turn) return;
+      try { stage.releasePointerCapture(turn.id); } catch (err) {}
+      turn = null;
+      controls.enabled = true;
+      stage.classList.remove('turning', 'near');
+      ring.classList.remove('active', 'show');
+      if (done) { setOpen(true); }
+      else { hintText.textContent = TEXT.closed; }
+    }
+    stage.addEventListener('pointerup', e => { if (turn && e.pointerId === turn.id) finishTurn(false); });
+    stage.addEventListener('pointercancel', e => { if (turn && e.pointerId === turn.id) finishTurn(false); });
+
+    /* ---------- buttons and keys ---------- */
+    document.getElementById('zin').onclick = () => dolly(0.82);
+    document.getElementById('zout').onclick = () => dolly(1 / 0.82);
+    document.getElementById('reset').onclick = () => home();
+    lidBtn.onclick = () => setOpen(false);
+    canvas.addEventListener('keydown', e => {
+      const st = Math.PI / 18;
+      switch (e.key) {
+        case 'ArrowLeft': orbit(-st, 0); break;
+        case 'ArrowRight': orbit(st, 0); break;
+        case 'ArrowUp': orbit(0, -st); break;
+        case 'ArrowDown': orbit(0, st); break;
+        case '+': case '=': dolly(0.85); break;
+        case '-': case '_': dolly(1 / 0.85); break;
+        case '0': case 'Home': home(); break;
+        case 'o': case 'O': if (mode === 'open') setOpen(false); else if (mode === 'closed') setOpen(true); break;
+        default: return;
+      }
+      e.preventDefault();
+    });
+    new ResizeObserver(() => {
+      const before = fitDist, d = camera.position.distanceTo(controls.target);
+      fit();
+      camera.position.sub(controls.target).setLength(d * fitDist / before).add(controls.target);
+    }).observe(stage);
+    canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); poster.classList.remove('gone'); fail('context lost'); });
+
+    /* ---------- hotspots: a dot on each main part, and a card that says what it does ----------
+       A dot shows only while its part can actually be seen (through the see-through walls too).
+       Mouse: hover a dot or the part itself. Touch: tap a dot or the part. */
+    const HOTSPOTS = [
+      { node: 'ipm', face: [0, 0, 1], yAt: 0, title: 'Power module (IGBT)', spec: 'Infineon IKCM20L60GD · 600 V / 20 A',
+        desc: 'Six switches that chop the 400 V DC into pulses 10,000 times a second. The gate drivers are built in.' },
+      { node: 'heatsink', face: [0, 0, 1], yAt: 0.3, title: 'Heatsink', spec: '120 × 100 × 56 mm aluminium · 0.47 K/W',
+        desc: 'Pulls the switching losses out of the power module and into the air. The 0.47 K/W comes from my Ansys heat simulation.' },
+      { node: 'fan_frame', face: [-1, 0, 0], yAt: 0.8, title: 'Cooling fan', spec: '80 mm · about 26 CFM',
+        desc: 'Pushes air between the heatsink fins. Even with the fan failed and the current turned down, the switches stay under 125 °C (119.2 °C).' },
+      { node: 'dclink_cap_1', title: 'DC-link capacitors', spec: '2 × 220 µF, 450 V',
+        desc: 'An energy buffer on the 400 V side, so the DC voltage stays steady while the switches chop it.', tier: 'Representative part sized from the design values.' },
+      { node: 'inductor_b', fx: 0.85, title: 'Filter inductors', spec: '2 mH per phase',
+        desc: 'Resist fast changes in current, so the switching pulses smooth out into a sine wave.', tier: 'Representative part sized from the design values.' },
+      { node: 'filter_cap_b', title: 'Filter capacitors', spec: '20 µF film per phase',
+        desc: 'Together with the inductors they smooth the voltage, so only the 60 Hz wave is left (filter resonance about 800 Hz).', tier: 'Representative part sized from the design values.' },
+      { node: 'control_board', title: 'Control board', spec: 'runs the control software',
+        desc: 'Runs the control loops I designed: virtual inertia, droop, the voltage loop and the current limit.', tier: 'Typical part, not specified in this design.' },
+      { node: 'sensor_current_b', title: 'Current sensors', spec: 'one per phase',
+        desc: 'Measure the phase currents, so the current limit can hold them at 10 A during a fault.', tier: 'Typical part, not specified in this design.' },
+      { node: 'terminal_block', title: 'AC output terminals', spec: 'three-phase output',
+        desc: 'Where the three-phase AC output wires connect.', tier: 'Typical part, not specified in this design.' }
+    ];
+    const labelLayer = document.getElementById('labels');
+    const labelBtn = document.getElementById('labelBtn');
+    const card = document.getElementById('card');
+    let labelsOn = true;
+    const spots = [];
+    let cardFor = null, pinned = false;
+    for (const h of HOTSPOTS) {
+      const node = model.getObjectByName(h.node);
+      if (!node) continue;
+      const el = document.createElement('div');
+      el.className = 'spot hid';
+      el.setAttribute('aria-label', h.title);
+      labelLayer.append(el);
+      const s = Object.assign({}, h, { node, el, box: new THREE.Box3(), pt: V(), x: 0, y: 0, seen: false });
+      el.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse' && !pinned) showCard(s); });
+      el.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !pinned) hideCard(); });
+      el.addEventListener('click', e => {
+        e.stopPropagation();
+        if (cardFor === s && pinned) hideCard(); else showCard(s, true);
+      });
+      spots.push(s);
+    }
+    labelBtn.onclick = () => {
+      labelsOn = !labelsOn;
+      labelBtn.textContent = labelsOn ? 'Hide dots' : 'Show dots';
+      labelBtn.setAttribute('aria-pressed', String(labelsOn));
+      if (!labelsOn) hideCard();
+    };
+
+    const ray = new THREE.Raycaster(), pv = V(), ndc = new THREE.Vector2(), tmpC = V(), toCam = V(), half = V();
+    function shownInScene(o) { for (let p = o; p; p = p.parent) if (!p.visible) return false; return true; }
+    function inside(o, parent) { for (let p = o; p; p = p.parent) if (p === parent) return true; return false; }
+    const seeThrough = o => [].concat(o.material).every(m => m.transparent && m.opacity < 0.6);
+    function firstSolidHit(x, y) {
+      ndc.set(x, y);
+      ray.setFromCamera(ndc, camera);
+      return ray.intersectObject(root, true).find(i => shownInScene(i.object) && !seeThrough(i.object)) || null;
+    }
+    /* Each dot has ONE fixed spot on its part, chosen once at load time: by default the centre
+       of the part's top, or another face given by `face` (with `fx` / `yAt` to slide along it).
+       The spot is snapped onto the real surface with a ray from outside the part. */
+    const anchorRay = new THREE.Raycaster();
+    function fixAnchor(s) {
+      s.box.setFromObject(s.node);
+      const c = s.box.getCenter(V()), size = s.box.getSize(V());
+      const n = s.face || [0, 1, 0];
+      const p = V(
+        n[0] ? c.x + n[0] * size.x / 2 : s.box.min.x + (s.fx != null ? s.fx : 0.5) * size.x,
+        n[1] ? c.y + n[1] * size.y / 2 : c.y + (s.yAt != null ? s.yAt : 0.2) * size.y / 2,
+        n[2] ? c.z + n[2] * size.z / 2 : c.z
+      );
+      // snap: shoot a ray inward from just outside the face and keep the first hit on this part
+      const dir = V(-n[0], -n[1], -n[2]);
+      anchorRay.set(p.clone().addScaledVector(dir, -0.05), dir);
+      const hit = anchorRay.intersectObject(s.node, true)[0];
+      s.pt.copy(hit ? hit.point : p);
+    }
+    // the dot shows only when nothing solid is between the camera and its fixed spot
+    function anchorVisible(s) {
+      pv.copy(s.pt).project(camera);
+      if (pv.z > 1 || Math.abs(pv.x) > 1 || Math.abs(pv.y) > 1) return false;
+      const hit = firstSolidHit(pv.x, pv.y);
+      return !hit || hit.distance > camera.position.distanceTo(s.pt) - 0.008;
+    }
+    spots.forEach(fixAnchor);
+
+    function showCard(s, pin = false) {
+      cardFor = s; pinned = pin;
+      card.querySelector('h3').textContent = s.title;
+      card.querySelector('.spec').textContent = s.spec;
+      card.querySelector('p').textContent = s.desc;
+      const t = card.querySelector('.tier'); t.textContent = s.tier || ''; t.hidden = !s.tier;
+      card.classList.add('show');
+      spots.forEach(o => o.el.classList.toggle('on', o === s));
+      placeCard();
+    }
+    function hideCard() {
+      cardFor = null; pinned = false;
+      card.classList.remove('show');
+      spots.forEach(o => o.el.classList.remove('on'));
+    }
+    function placeCard() {
+      if (!cardFor) return;
+      const w = stage.clientWidth, h = stage.clientHeight, cw = card.offsetWidth, ch = card.offsetHeight;
+      let x = cardFor.x + 22, y = cardFor.y - 20;
+      if (x + cw > w - 12) x = cardFor.x - 22 - cw;
+      x = Math.max(12, x);
+      y = Math.min(Math.max(12, y), h - ch - 12);
+      card.style.transform = `translate3d(${x.toFixed(0)}px, ${y.toFixed(0)}px, 0)`;
+    }
+
+    // hovering (mouse) or tapping (touch) the part itself
+    function spotAt(e) {
+      const r = stage.getBoundingClientRect();
+      const hit = firstSolidHit(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+      if (!hit) return null;
+      return spots.find(s => inside(hit.object, s.node)) || null;
+    }
+    const isDot = t => !!(t && t.classList && t.classList.contains('spot'));
+    let lastHover = 0;
+    stage.addEventListener('pointermove', e => {
+      if (e.pointerType !== 'mouse' || e.buttons || turn || !labelsOn || pinned || isDot(e.target)) return;
+      const now = performance.now();
+      if (now - lastHover < 60) return;
+      lastHover = now;
+      const s = stage.classList.contains('near') ? null : spotAt(e);
+      if (s && s.seen) { if (cardFor !== s) showCard(s); stage.style.cursor = 'help'; }
+      else { if (cardFor) hideCard(); stage.style.cursor = ''; }
+    });
+    stage.addEventListener('pointerleave', () => { if (!pinned) hideCard(); });
+    let downAt = null;
+    stage.addEventListener('pointerdown', e => { downAt = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+    stage.addEventListener('pointerup', e => {
+      if (!downAt || turn) return;
+      const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y), quick = performance.now() - downAt.t < 450;
+      downAt = null;
+      if (isDot(e.target)) return;
+      if (moved > 6 || !quick || !labelsOn) { if (moved > 6 && !pinned) hideCard(); return; }
+      const s = spotAt(e);
+      if (s && s.seen) showCard(s, true); else hideCard();
+    });
+
+    let rr = 0;
+    function placeLabels() {
+      labelLayer.classList.toggle('off', !labelsOn || !!turn);
+      const w = stage.clientWidth, h = stage.clientHeight;
+      // visibility: re-test a few parts per frame (the raycasts are the expensive part)
+      for (let k = 0; k < 3 && spots.length; k++) {
+        const s = spots[rr++ % spots.length];
+        s.seen = anchorVisible(s);
+        s.el.classList.toggle('hid', !s.seen);
+        if (!s.seen && cardFor === s) hideCard();
+      }
+      for (const s of spots) {
+        if (!s.seen) continue;
+        pv.copy(s.pt).project(camera);
+        s.x = (pv.x * 0.5 + 0.5) * w; s.y = (-pv.y * 0.5 + 0.5) * h;
+        s.el.style.transform = `translate3d(${s.x.toFixed(1)}px, ${s.y.toFixed(1)}px, 0)`;
+      }
+      placeCard();
+    }
+
+    /* ---------- loop ---------- */
+    let last = 0, shownProgress = progress;
+    renderer.setAnimationLoop(now => {
+      const dt = last ? Math.min(0.1, (now - last) / 1000) : 1 / 60;
+      last = now;
+      if (mode === 'opening') {
+        // screws spin out and leave, then the lid lifts and fades out
+        if (removal < 1) removal = Math.min(1, removal + dt / 0.8);
+        else lidT = Math.min(1, lidT + dt / 2.0);
+        if (lidT >= 1) {
+          mode = 'open';
+          lidBtn.hidden = false;
+        }
+      } else if (mode === 'closing') {
+        // lid fades in and comes down first, then the screws arrive, then they screw in
+        if (lidT > 0) lidT = Math.max(0, lidT - dt / 1.4);
+        else if (removal > 0) removal = Math.max(0, removal - dt / 0.8);
+        else if (progress > 0) progress = Math.max(0, progress - dt / 1.4);
+        else {
+          mode = 'closed';
+          hintText.textContent = TEXT.closed;
+          hint.classList.remove('gone');
+        }
+      }
+      // the gesture drives the screws directly; in the closing sequence they follow progress as it runs down
+      shownProgress += (progress - shownProgress) * Math.min(1, dt * (mode === 'closing' ? 30 : 14));
+      applyParts(shownProgress);
+      controls.update(dt);
+      renderer.render(scene, camera);
+      placeLabels(now);
+    });
+
+    poster.classList.add('gone');
+    if (startOpen) {
+      lidBtn.hidden = false;
+      hintText.textContent = TEXT.open;
+    } else {
+      hintText.textContent = TEXT.closed;
+    }
+    window.__viewer = { screws: screws.length, screen: () => screws.map(screenOf), model, THREE };
+  </script>
+</body>
+</html>

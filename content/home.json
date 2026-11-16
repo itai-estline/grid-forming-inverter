@@ -1,0 +1,454 @@
+{
+  "site": {
+    "logo": "Grid-Forming Inverter",
+    "intro": "Scroll to follow the power.",
+    "credit": "Itai Estline · Independent project · Simulation and design, no hardware built",
+    "tools": "MATLAB R2026a, Simulink, Simscape Electrical, Ansys Mechanical, Autodesk Fusion",
+    "illustrativeLabel": "Illustrative model",
+    "menuLabel": "Explore the details",
+    "menu": [
+      {
+        "title": "Grid-forming in the real world",
+        "href": "real-world.html"
+      },
+      {
+        "title": "Power stage and filter",
+        "href": "power-stage.html"
+      },
+      {
+        "title": "Virtual inertia and droop",
+        "href": "inertia-droop.html"
+      },
+      {
+        "title": "The voltage loop",
+        "href": "voltage-loop.html"
+      },
+      {
+        "title": "Current limiting and faults",
+        "href": "current-limiting.html"
+      },
+      {
+        "title": "Two inverters in parallel",
+        "href": "parallel.html"
+      },
+      {
+        "title": "Packaging and thermal",
+        "href": "packaging-thermal.html"
+      },
+      {
+        "title": "Side chapter: the dq frame",
+        "href": "dq-frame.html"
+      },
+      {
+        "title": "Side chapter: PLL grid sync",
+        "href": "pll.html"
+      },
+      {
+        "title": "Build log, V1 to V13",
+        "href": "build-log.html"
+      },
+      {
+        "title": "What went wrong",
+        "href": "what-went-wrong.html"
+      },
+      {
+        "title": "Sources",
+        "href": "sources.html"
+      }
+    ]
+  },
+  "stations": [
+    {
+      "id": "s01",
+      "n": 1,
+      "act": 1,
+      "space": "world",
+      "title": "Where your power comes from",
+      "caption": [
+        "Sun, wind and batteries make it.",
+        "An inverter is the gate it all passes through."
+      ],
+      "number": null,
+      "source": null,
+      "deeper": {
+        "label": "Go deeper",
+        "href": "real-world.html#chain"
+      },
+      "hint": null,
+      "illustrative": false,
+      "tierNote": null
+    },
+    {
+      "id": "s02",
+      "n": 2,
+      "act": 1,
+      "space": "world",
+      "title": "The old heartbeat",
+      "caption": [
+        "Big spinning generators set the rhythm: 60 Hz.",
+        "Their sheer weight keeps it steady when demand jumps."
+      ],
+      "number": {
+        "value": "60 Hz",
+        "source": "Nominal grid frequency in North America"
+      },
+      "source": "Theory note 01, Power System Basics",
+      "deeper": {
+        "label": "Go deeper",
+        "href": "inertia-droop.html#why-inertia"
+      },
+      "hint": null,
+      "illustrative": false,
+      "tierNote": null
+    },
+    {
+      "id": "s03",
+      "n": 3,
+      "act": 1,
+      "space": "world",
+      "title": "Losing the heartbeat",
+      "caption": [
+        "Solar, wind and batteries have no spinning mass.",
+        "As the old plants retire, that steadying weight goes with them,",
+        "and the same bump shakes the frequency harder."
+      ],
+      "number": null,
+      "source": "Theory note 01, Power System Basics",
+      "deeper": {
+        "label": "Go deeper",
+        "href": "inertia-droop.html#why-inertia"
+      },
+      "hint": "Try it: drag left or right to change the inertia",
+      "illustrative": true,
+      "tierNote": null
+    },
+    {
+      "id": "s04",
+      "n": 4,
+      "act": 1,
+      "space": "world",
+      "title": "Follow or lead",
+      "caption": [
+        "Most inverters only follow. They copy the grid's voltage, so when the grid drops, they shut off.",
+        "A grid-forming inverter makes its own voltage and frequency, so the lights stay on."
+      ],
+      "number": null,
+      "source": "Theory note 02, Grid-Following vs Grid-Forming",
+      "deeper": {
+        "label": "Go deeper",
+        "href": "real-world.html#follow-or-form"
+      },
+      "hint": null,
+      "illustrative": false,
+      "tierNote": null
+    },
+    {
+      "id": "s05",
+      "n": 5,
+      "act": 1,
+      "space": "world",
+      "title": "Why the grid needs them",
+      "caption": [
+        "A grid full of followers needs something to follow.",
+        "Grid-forming inverters can be that something. They hold up islands, restart a grid after a blackout,",
+        "and keep weak lines steady with no spinning machine at all."
+      ],
+      "number": null,
+      "source": "Theory notes 02 and 03",
+      "deeper": {
+        "label": "Go deeper",
+        "href": "real-world.html#installations"
+      },
+      "hint": null,
+      "illustrative": false,
+      "tierNote": null
+    },
+    {
+      "id": "s06",
+      "n": 6,
+      "act": 2,
+      "space": "machine",
+      "title": "Inside the box",
+      "caption": [
+        "This one is my design. It does the same job as a grid-scale unit, scaled down to about 1 kW.",
+        "It starts with 400 V of DC, held stiff by two capacitors."
+      ],
+      "number": {
+        "value": "400 V",
+        "source": "DC source 400 V; DC-link 2 × 220 µF, 450 V. Manual V11 and V12"
+      },
+      "source": "Manual V11, V12",
+      "deeper": {
+        "label": "Go deeper",
+        "href": "power-stage.html#dc-bus"
+      },
+      "hint": null,
+      "illustrative": false,
+      "tierNote": "Capacitor shape: representative part",
+      "focus": [
+        "dclink_cap_1",
+        "dclink_cap_2"
+      ]
+    },
+    {
+      "id": "s07",
+      "n": 7,
+      "act": 2,
+      "space": "machine",
+      "title": "Six fast switches",
+      "caption": [
+        "One module chops the DC into pulses,",
+        "10,000 times a second."
+      ],
+      "number": {
+        "value": "10,000",
+        "source": "Infineon IKCM20L60GD IGBT module, 600 V / 20 A, switched at 10 kHz. Manual V11"
+      },
+      "source": "Manual V11",
+      "deeper": {
+        "label": "Go deeper",
+        "href": "power-stage.html#switches"
+      },
+      "hint": null,
+      "illustrative": false,
+      "tierNote": null,
+      "focus": [
+        "ipm"
+      ]
+    },
+    {
+      "id": "s08",
+      "n": 8,
+      "act": 2,
+      "space": "machine",
+      "title": "Pulses in, sine out",
+      "caption": [
+        "Coils smooth the current. Capacitors smooth the voltage.",
+        "What leaves is a clean 60 Hz wave."
+      ],
+      "number": {
+        "value": "60 Hz",
+        "source": "LC filter 2 mH + 20 µF per phase, resonance about 800 Hz. Manual V13, D21"
+      },
+      "source": "Manual V13, D21",
+      "deeper": {
+        "label": "Go deeper",
+        "href": "power-stage.html#filter"
+      },
+      "hint": null,
+      "illustrative": false,
+      "tierNote": "Coil and capacitor shapes: representative parts",
+      "focus": [
+        "inductor_a",
+        "inductor_b",
+        "inductor_c",
+        "filter_cap_a",
+        "filter_cap_b",
+        "filter_cap_c"
+      ]
+    },
+    {
+      "id": "s09",
+      "n": 9,
+      "act": 2,
+      "space": "machine",
+      "title": "A flywheel made of math",
+      "caption": [
+        "The controller measures power and spins a virtual flywheel.",
+        "It is the old heartbeat, rebuilt in software."
+      ],
+      "number": null,
+      "source": "Virtual synchronous machine, manual V7; final values V13",
+      "deeper": {
+        "label": "Go deeper",
+        "href": "inertia-droop.html#vsm"
+      },
+      "hint": null,
+      "illustrative": false,
+      "tierNote": "Controller board: typical part, not specified in this design",
+      "focus": [
+        "control_board"
+      ]
+    },
+    {
+      "id": "s10",
+      "n": 10,
+      "act": 2,
+      "space": "machine",
+      "title": "Lean, don't break",
+      "caption": [
+        "More load? The frequency eases down a little and holds.",
+        "Doubling the load cost about 0.3 Hz."
+      ],
+      "number": {
+        "value": "0.3 Hz",
+        "source": "Load step from 8.4 Ω to 4.2 Ω: 59.857 Hz to 59.554 Hz. V13, D26"
+      },
+      "source": "V13, D26",
+      "deeper": {
+        "label": "Go deeper",
+        "href": "inertia-droop.html#droop"
+      },
+      "hint": null,
+      "illustrative": false,
+      "tierNote": null,
+      "focus": [
+        "control_board"
+      ]
+    },
+    {
+      "id": "s11",
+      "n": 11,
+      "act": 2,
+      "space": "machine",
+      "title": "Holding the voltage",
+      "caption": [
+        "A fast loop compares the wave it wants with the wave it has.",
+        "They agree to within 0.12 %."
+      ],
+      "number": {
+        "value": "0.12 %",
+        "source": "Capacitor voltage error at base load: −0.12 % (inverter 1), −0.04 % (inverter 2). V13, D14"
+      },
+      "source": "V13, D14",
+      "deeper": {
+        "label": "Go deeper",
+        "href": "voltage-loop.html"
+      },
+      "hint": null,
+      "illustrative": false,
+      "tierNote": "Voltage sensor: typical part, not specified in this design",
+      "focus": [
+        "sensor_voltage",
+        "filter_cap_a",
+        "filter_cap_b",
+        "filter_cap_c"
+      ]
+    },
+    {
+      "id": "s12",
+      "n": 12,
+      "act": 2,
+      "space": "machine",
+      "title": "Ten amps, no more",
+      "caption": [
+        "A short circuit hits the output.",
+        "The current is held at 10 A instead of running away."
+      ],
+      "number": {
+        "value": "10 A",
+        "source": "Bolted fault on the shared bus: 9.999 A and 10.001 A, limit 10 A. V13, D27"
+      },
+      "source": "V13, D27",
+      "deeper": {
+        "label": "Go deeper",
+        "href": "current-limiting.html"
+      },
+      "hint": null,
+      "illustrative": false,
+      "tierNote": "Current sensors: typical parts, not specified in this design",
+      "focus": [
+        "sensor_current_a",
+        "sensor_current_b",
+        "sensor_current_c"
+      ]
+    },
+    {
+      "id": "s13",
+      "n": 13,
+      "act": 2,
+      "space": "machine",
+      "title": "Keeping it cool",
+      "caption": [
+        "A finned heatsink and a fan carry the heat away.",
+        "The hottest point stays under its 125 °C limit."
+      ],
+      "number": {
+        "value": "125 °C",
+        "source": "IGBT junction 110.6 °C at heavy load, 119.2 °C with a fan failure; design limit 125 °C. Heatsink 0.47 K/W under the module (FEA). D1, manual V11"
+      },
+      "source": "D1, manual V11",
+      "deeper": {
+        "label": "Go deeper",
+        "href": "packaging-thermal.html"
+      },
+      "hint": null,
+      "illustrative": false,
+      "tierNote": null,
+      "focus": [
+        "heatsink",
+        "fan_frame",
+        "fan_rotor",
+        "thermal_pad",
+        "ipm"
+      ]
+    },
+    {
+      "id": "s14",
+      "n": 14,
+      "act": 3,
+      "space": "machine",
+      "title": "Sharing without talking",
+      "caption": [
+        "Two of my units feed one bus. A load step hits,",
+        "and one picks up exactly twice the other's share. 2:1, automatically."
+      ],
+      "number": {
+        "value": "2:1",
+        "source": "ΔP₂/ΔP₁ = 2.000 with D = 150 and 300: +284.8 W and +569.7 W. V13, D26"
+      },
+      "source": "V13, D26",
+      "deeper": {
+        "label": "Go deeper",
+        "href": "parallel.html"
+      },
+      "hint": "Try it: drag up or down to change the load",
+      "illustrative": true,
+      "tierNote": null
+    },
+    {
+      "id": "s15",
+      "n": 15,
+      "act": 3,
+      "space": "world",
+      "title": "Many leaders, one grid",
+      "caption": [
+        "On a real grid the units are far bigger, but the rule is the same.",
+        "A disturbance arrives, and they all lean in and absorb it together."
+      ],
+      "number": null,
+      "source": "Theory note 03; the same droop law as station 14",
+      "deeper": {
+        "label": "Go deeper",
+        "href": "real-world.html#open-problems"
+      },
+      "hint": null,
+      "illustrative": true,
+      "tierNote": null
+    },
+    {
+      "id": "s16",
+      "n": 16,
+      "act": 3,
+      "space": "world",
+      "title": "Thirteen versions later",
+      "caption": [
+        "I built this in 13 versions, all in simulation: a small-scale version of what a grid-forming plant does.",
+        "The details, the mistakes and the sources are one click away."
+      ],
+      "number": {
+        "value": "13",
+        "source": "Model versions V1 to V13"
+      },
+      "source": "Build log",
+      "deeper": {
+        "label": "Read the build log",
+        "href": "build-log.html"
+      },
+      "hint": null,
+      "illustrative": false,
+      "tierNote": null,
+      "closing": true
+    }
+  ]
+}

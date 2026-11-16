@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Virtual inertia and droop · Grid-Forming Inverter</title>
+  <meta name="description" content="Why a grid needs inertia, how my inverter design imitates a spinning rotor with the swing equation, and how droop lets two inverters share load without talking to each other.">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/detail.css">
+  <style>
+    /* Page-local styles for the hand-drawn diagrams (gd) and the small widgets (gw) on this page. */
+    .gd-scroll { overflow-x: auto; }
+    .gd-scroll:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+    svg.gd { display: block; width: 100%; min-width: 560px; height: auto; }
+    svg.gd .ln { fill: none; stroke: var(--ink-3); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+    svg.gd .ln.c-inv1 { stroke: var(--inv1); fill: none; }
+    svg.gd .ln.c-inv2 { stroke: var(--inv2); fill: none; }
+    svg.gd .ln.c-muted { stroke: var(--ink-3); stroke-width: 1.25; fill: none; }
+    svg.gd .axis { fill: none; stroke: var(--night-4); stroke-width: 1.5; }
+    svg.gd .grid { fill: none; stroke: var(--night-3); stroke-width: 1; }
+    svg.gd .dash { stroke-dasharray: 5 6; }
+    svg.gd .pt { stroke: var(--night-1); stroke-width: 2; }
+    svg.gd .pt.c-inv1 { fill: var(--inv1); }
+    svg.gd .pt.c-inv2 { fill: var(--inv2); }
+    svg.gd .pt.c-ink { fill: var(--ink); }
+    svg.gd text { font-family: var(--font-sans); font-size: 14px; fill: var(--ink); stroke: none; }
+    svg.gd text.sub { font-family: var(--font-mono); font-size: 12px; fill: var(--ink-2); }
+    svg.gd text.lbl { font-size: 12px; fill: var(--ink-3); }
+    svg.gd text.c-inv1 { fill: var(--inv1); }
+    svg.gd text.c-inv2 { fill: var(--inv2); }
+
+    .gw { display: grid; gap: var(--s-4); }
+    .gw-controls { display: flex; flex-wrap: wrap; gap: var(--s-4) var(--s-5); align-items: flex-end; }
+    .gw-field { display: grid; gap: 6px; flex: 1 1 240px; font: 500 14px/1.3 var(--font-sans); color: var(--ink-2); }
+    .gw-field output { font-family: var(--font-mono); color: var(--ink); }
+    .gw input[type="range"] { width: 100%; accent-color: var(--ac); min-height: 28px; }
+    .gw input:focus-visible, .gw-btn:focus-visible { outline: 2px solid var(--ac); outline-offset: 3px; }
+    .gw-btns { display: flex; flex-wrap: wrap; gap: 8px; flex: 1 1 100%; }
+    .gw-btn { font: 500 13px/1.2 var(--font-sans); color: var(--ink); background: var(--night-3); border: 1px solid var(--night-4); border-radius: var(--radius-pill); padding: 9px 14px; cursor: pointer; }
+    .gw-btn[aria-pressed="true"] { border-color: var(--ac); color: var(--ac); }
+    .gw-plot { display: block; width: 100%; height: auto; background: var(--night-0); border: 1px solid var(--night-3); border-radius: var(--radius); }
+    .gw-plot text { font-family: var(--font-mono); font-size: 11px; fill: var(--ink-3); stroke: none; }
+    .gw-plot .grid { stroke: var(--night-3); stroke-width: 1; fill: none; }
+    .gw-plot .mark { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 3 5; fill: none; }
+    .gw-plot .ghost { stroke: var(--ink-3); stroke-width: 1.5; stroke-dasharray: 2 4; fill: none; }
+    .gw-plot .wave { stroke: var(--ac); stroke-width: 2.25; fill: none; stroke-linejoin: round; }
+    .gw-plot text.t-ac { fill: var(--ac); }
+    .gw-readout { margin: 0; font: 13px/1.6 var(--font-mono); color: var(--ink-2); }
+    .gw-readout b { color: var(--ink); font-weight: 500; }
+  </style>
+  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }</script>
+  <script type="module" src="js/detail/detail.js"></script>
+</head>
+<body class="detail" data-page="inertia-droop">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header" data-site-header></header>
+  <main id="main">
+    <article class="page">
+      <header class="page-head">
+        <p class="eyebrow">Inside the design · Stations 02, 03, 09, 10</p>
+        <h1>Virtual inertia and droop</h1>
+        <p class="lede">A grid-forming inverter has to decide its own frequency. Mine does it with a virtual synchronous machine: a few lines of math that behave like a spinning rotor. This page explains why a grid wants inertia, how the swing equation supplies some, and why two of these inverters share load without talking to each other.</p>
+        <p class="back-links">
+          <a href="index.html#s02">Back to the journey, station 02</a>
+          <a href="index.html#s03">Station 03</a>
+          <a href="index.html#s09">Station 09</a>
+          <a href="index.html#s10">Station 10</a>
+        </p>
+      </header>
+
+      <div class="results">
+        <div class="result"><span class="value">59.857 → 59.554 Hz</span><span class="label">Frequency before and after the load doubled</span><span class="src">V13, D26</span></div>
+        <div class="result"><span class="value">J = 0.5</span><span class="label">Virtual inertia, both inverters</span><span class="src">Manual V7</span></div>
+        <div class="result"><span class="value">D = 150 / 300</span><span class="label">Damping, which is also the droop gain (inverter 1 / 2)</span><span class="src">Manual V10</span></div>
+        <div class="result"><span class="value">5 % per 500 VAR</span><span class="label">Voltage droop for reactive power</span><span class="src">V13, D13</span></div>
+      </div>
+
+      <section id="why-inertia">
+        <h2>Why a grid needs inertia</h2>
+        <p>The traditional grid is run by synchronous generators: big machines whose rotors all turn in step with the grid frequency, 60 Hz in North America. Supply and demand on a grid have to match at every instant. When they don't, for example when a large load switches on, the missing power has to come from somewhere right away, before any control system has reacted.</p>
+        <p>It comes from the rotors. They are heavy and they are spinning, so they store kinetic energy, and they give some of it up by slowing down slightly. Rotor speed and grid frequency are locked together, so the frequency drops with them<sup class="fn"><a href="#fn-1" id="fnref-1">1</a></sup>.</p>
+        <p>How fast it drops depends on how much spinning mass there is. With a lot of inertia the frequency slides down slowly, and the plants have time to add power. With little inertia the same disturbance makes the frequency fall quickly. Engineers call that speed the rate of change of frequency, and a grid that moves too fast is hard to keep stable.</p>
+        <p>Solar panels and batteries have no rotor. An inverter that only follows the grid adds no inertia. So as spinning plants are replaced, the same bump shakes the frequency harder<sup class="fn"><a href="#fn-1">1</a></sup>. A grid-forming inverter can fill that gap by behaving, on purpose, like a machine with mass.</p>
+      </section>
+
+      <section id="vsm">
+        <h2>The virtual synchronous machine</h2>
+        <p>The part of my controller that does this is called a virtual synchronous machine (VSM). It has three steps: measure the power, run the swing equation, and turn the resulting frequency into a phase angle.</p>
+
+        <h3>1. Measure P and Q</h3>
+        <p>A three-phase power sensor at the inverter output gives the active power <var>P</var> and the reactive power <var>Q</var>. Each one goes through a moving average that is one cycle long (1/60 s), which removes the ripple and leaves a steady number<sup class="fn"><a href="#fn-2" id="fnref-2">2</a></sup>.</p>
+
+        <h3>2. The swing equation</h3>
+        <p>This is the equation that describes how a real generator's rotor speeds up and slows down. I use it with made-up mass:</p>
+        <p class="eq"><var>J</var>·d<var>ω</var>/d<var>t</var> = <var>P</var><sub>0</sub> − <var>P</var> − <var>D</var>·(<var>ω</var> − <var>ω</var><sub>0</sub>)</p>
+        <p>Here <var>ω</var> is the inverter's frequency in rad/s and <var>ω</var><sub>0</sub> = 2π × 60 is the nominal value. <var>P</var><sub>0</sub> is a power setpoint and <var>P</var> is the measured power. Read it like this: if the load takes more power than the setpoint, the right side goes negative and the frequency starts to fall. <var>J</var> decides how quickly it is allowed to fall, like the mass of a rotor. The <var>D</var> term pushes back harder the further the frequency is from 60 Hz, so the fall stops somewhere.</p>
+
+        <div class="table-wrap"><table class="data">
+          <caption>Swing equation settings in the final model<sup class="fn"><a href="#fn-3" id="fnref-3">3</a></sup><sup class="fn"><a href="#fn-4" id="fnref-4">4</a></sup></caption>
+          <thead><tr><th scope="col">Setting</th><th scope="col">Inverter 1</th><th scope="col">Inverter 2</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Virtual inertia <var>J</var></th><td>0.5</td><td>0.5</td></tr>
+            <tr><th scope="row">Damping <var>D</var></th><td>150</td><td>300</td></tr>
+            <tr><th scope="row">Power setpoint <var>P</var><sub>0</sub></th><td>250 W</td><td>250 W</td></tr>
+            <tr><th scope="row">Frequency clamp</th><td colspan="2">±10 % of 60 Hz (54 to 66 Hz)</td></tr>
+            <tr><th scope="row">Update step</th><td colspan="2">10 µs</td></tr>
+          </tbody>
+        </table></div>
+
+        <p>Getting these numbers took a few tries. My first attempt in V7 used <var>D</var> = 10 and <var>P</var><sub>0</sub> = 0. With <var>P</var><sub>0</sub> = 0 the equation treats the whole load as an excess and drives the frequency down until it hits the clamp at 54 Hz, and <var>D</var> = 10 was not enough damping<sup class="fn"><a href="#fn-3">3</a></sup>. <var>P</var><sub>0</sub> has to be close to the power the inverter really delivers: 495.75 W for the single inverter in V7, and 250 W each once two inverters share the load<sup class="fn"><a href="#fn-4">4</a></sup>.</p>
+
+        <figure class="widget" data-illustrative id="w-swing">
+          <div class="gw">
+            <div class="gw-controls">
+              <label class="gw-field" for="ws-j">
+                <span>Virtual inertia J: <output id="ws-j-out" for="ws-j">0.5</output></span>
+                <input type="range" id="ws-j" min="0" max="8" step="1" value="3" aria-valuetext="J = 0.5">
+              </label>
+              <label class="gw-field" for="ws-d">
+                <span>Damping D: <output id="ws-d-out" for="ws-d">150</output></span>
+                <input type="range" id="ws-d" min="50" max="600" step="10" value="150" aria-valuetext="D = 150">
+              </label>
+              <div class="gw-btns" role="group" aria-label="Reset to the values of one inverter">
+                <button type="button" class="gw-btn" id="ws-p1" aria-pressed="true">Inverter 1: D = 150, load 385.2 W to 670.0 W</button>
+                <button type="button" class="gw-btn" id="ws-p2" aria-pressed="false">Inverter 2: D = 300, load 520.3 W to 1090.0 W</button>
+              </div>
+            </div>
+            <svg class="gw-plot" id="ws-plot" viewBox="0 0 720 340" role="img" aria-label="Plot of frequency against time for a load step at 0.05 seconds, for the chosen inertia and damping."></svg>
+            <p class="gw-readout" id="ws-readout">This plot needs JavaScript. With J = 0.5 and D = 150 the frequency goes from 59.857 Hz to 59.554 Hz.</p>
+          </div>
+          <figcaption>Illustrative model, not the Simulink result. It is a simplified single machine: one inverter, a fixed load step, power measured through a one-cycle average, and the swing equation integrated with the same 10 µs step as my controller. It leaves out the second inverter, the filter and the network. The dotted line is the same step with that inverter's own J and D.</figcaption>
+        </figure>
+
+        <p>Two things to try. Raise <var>J</var> and the frequency takes longer to move: that is inertia. Raise <var>D</var> and it does not fall as far: that is damping. In this simple model the time constant is <var>J</var>/<var>D</var>. With my values that is 0.5 / 150 ≈ 3.3 ms, shorter than the one-cycle power measurement, so at the default settings the measurement sets the pace.</p>
+        <p>With the default settings the start and end frequencies match V13, because they depend only on the steady state, which the next section explains. The path in between is the simplified part. In Simulink, with both inverters and the network, the frequency settled about half a second after the step<sup class="fn"><a href="#fn-5" id="fnref-5">5</a></sup>.</p>
+
+        <h3>3. Phase is the integral of frequency</h3>
+        <p>The voltage reference is a sine of an angle <var>θ</var>, so the frequency has to become an angle. The angle is the running integral of the frequency, wrapped to stay between 0 and 2π:</p>
+        <p class="eq"><var>θ</var> = ∫ 2π·<var>f</var> d<var>t</var></p>
+        <p>My April models computed <var>θ</var> = <var>ω</var>·<var>t</var> instead. That is the same thing only if the frequency never changes, and the whole point of this controller is that it does<sup class="fn"><a href="#fn-6" id="fnref-6">6</a></sup>. The bug helped a wrong result look right until November. The full story is on the <a href="what-went-wrong.html">what went wrong page</a>.</p>
+      </section>
+
+      <section id="droop">
+        <h2>Droop: sharing load by leaning</h2>
+        <p>Once things settle, the frequency stops changing, so d<var>ω</var>/d<var>t</var> = 0 and <var>J</var> drops out of the swing equation. What is left is a straight line:</p>
+        <p class="eq"><var>P</var> = <var>P</var><sub>0</sub> − <var>D</var>·(<var>ω</var> − <var>ω</var><sub>0</sub>)</p>
+        <p>This is droop, and <var>D</var> is the droop gain. For every rad/s the frequency sits below nominal, the inverter delivers <var>D</var> more watts. Two inverters on the same bus see the same frequency, so the one with the larger <var>D</var> takes more of the load. Inverter 2 has <var>D</var> = 300, twice inverter 1's 150, so it picks up twice the change. Neither unit needs to know the other exists. The shared frequency is the only message.</p>
+
+<p>Here is the check with numbers. In the V13 load step the load on the bus doubles (a second 8.4 Ω is switched in next to the first), and both inverters go from 59.857 Hz to 59.554 Hz<sup class="fn"><a href="#fn-7" id="fnref-7">7</a></sup>. That is about 0.3 Hz for twice the load. At 59.554 Hz:</p>
+        <p class="eq">Δ<var>ω</var> = 2π × (59.554 − 60) = −2.802 rad/s</p>
+        <p class="eq"><var>P</var><sub>1</sub> = 250 + 150 × 2.802 = 670.3 W &nbsp;&nbsp; <var>P</var><sub>2</sub> = 250 + 300 × 2.802 = 1090.7 W</p>
+
+        <div class="table-wrap"><table class="data">
+          <caption>V13 load step, simulation against the droop line<sup class="fn"><a href="#fn-7">7</a></sup></caption>
+          <thead><tr><th scope="col"></th><th scope="col">Before</th><th scope="col">After</th><th scope="col">Change</th><th scope="col">Hand calculation, after</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Inverter 1 (<var>D</var> = 150)</th><td>385.2 W</td><td>670.0 W</td><td>+284.8 W</td><td>670.3 W</td></tr>
+            <tr><th scope="row">Inverter 2 (<var>D</var> = 300)</th><td>520.3 W</td><td>1090.0 W</td><td>+569.7 W</td><td>1090.7 W</td></tr>
+            <tr><th scope="row">Frequency, both</th><td>59.857 Hz</td><td>59.554 Hz</td><td>−0.303 Hz</td><td></td></tr>
+          </tbody>
+        </table></div>
+
+        <p>The simulation lands within 1 W of the line, and the change in inverter 2 is 2.000 times the change in inverter 1. The <a href="parallel.html">parallel operation page</a> goes through that test in detail. Notice also that neither inverter sits at 60 Hz even at base load: both deliver more than their 250 W setpoint, so both lean a little below nominal.</p>
+
+        <h3>Plain droop came first</h3>
+        <p>Before the VSM there was V4, which used droop with no inertia at all: the frequency was set directly from the measured power, <var>f</var> = <var>f</var><sub>0</sub> − <var>K</var><sub>p</sub>·<var>P</var>, with <var>K</var><sub>p</sub> = 0.00001 Hz/W. A single inverter ran at 59.9905 Hz with an 8.4 Ω load and 59.9820 Hz with 4.2 Ω<sup class="fn"><a href="#fn-8" id="fnref-8">8</a></sup>.</p>
+
+        <div class="table-wrap"><table class="data">
+          <caption>Plain droop (V4) and the final VSM (V13)</caption>
+          <thead><tr><th scope="col"></th><th scope="col">V4, plain droop</th><th scope="col">V13, VSM</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Setup</th><td>one inverter</td><td>two inverters on one bus</td></tr>
+            <tr><th scope="row">Frequency at 8.4 Ω</th><td>59.9905 Hz</td><td>59.857 Hz</td></tr>
+            <tr><th scope="row">Frequency at 4.2 Ω</th><td>59.9820 Hz</td><td>59.554 Hz</td></tr>
+            <tr><th scope="row">Slope</th><td>0.00001 Hz/W</td><td>1/(2π·<var>D</var>) = 0.00106 and 0.00053 Hz/W</td></tr>
+            <tr><th scope="row">Inertia</th><td>none, frequency follows power at once</td><td><var>J</var> = 0.5</td></tr>
+            <tr><th scope="row">Source</th><td>Manual V5, prerequisites</td><td>V13, D26</td></tr>
+          </tbody>
+        </table></div>
+
+        <p>These are different models with different gains, so the two columns are not a like-for-like comparison. What they share is the shape: more load, lower frequency, along a straight line. The VSM adds the rotor in front of that line.</p>
+
+        <h3>The same idea for voltage</h3>
+        <p>Droop runs a second time for reactive power, with voltage in place of frequency:</p>
+        <p class="eq"><var>V</var><sub>mag</sub> = <var>V</var><sub>0</sub> − <var>K</var><sub>q</sub>·<var>Q</var></p>
+        <p><var>V</var><sub>0</sub> is 71.5 V and <var>K</var><sub>q</sub> is 0.00715 V/VAR. I chose <var>K</var><sub>q</sub> so that 500 VAR lowers the voltage by 5 %: 0.05 × 71.5 / 500 = 0.00715<sup class="fn"><a href="#fn-9" id="fnref-9">9</a></sup>. An inverter that supplies more than its share of reactive power lowers its voltage a little, which pushes reactive power toward the other unit. At base load there is almost none to share (5.3 and −1.1 VAR)<sup class="fn"><a href="#fn-10" id="fnref-10">10</a></sup>, and after the load step the two units carry 34.3 and 21.2 VAR<sup class="fn"><a href="#fn-7">7</a></sup>.</p>
+        <p>This droop existed in every version since V4, but before V13 it did almost nothing, because the voltage loop underneath it was not really regulating the voltage. Fixing that is the subject of the <a href="voltage-loop.html">voltage loop page</a>. Once it worked, I could measure its effect: in an intermediate V13 build, switching the voltage droop off under overload raised the reactive power circulating between the units from 308 VAR to 872 VAR<sup class="fn"><a href="#fn-11" id="fnref-11">11</a></sup>. Getting from 308 VAR down to the final 11 VAR took something else, a virtual reactance, which is on the <a href="parallel.html">parallel operation page</a>.</p>
+      </section>
+
+      <section id="controller">
+        <h2>Where this would run</h2>
+        <p>In hardware, all of this would run on a small controller board with a microcontroller. I did not design that board or choose a processor. The algorithms are fully specified in the V13 model. The hardware they would run on is not.</p>
+
+        <figure class="part-viewer" data-model="assets/models/inverter/unit.glb" data-nodes="control_board,standoffs"
+                data-poster="assets/renders/control_board.webp" data-tier="C"
+                data-callouts='[{"node":"control_board","text":"Would run the control loops: virtual inertia, droop, voltage loop, current limit"}]'>
+          <figcaption>Controller board. Typical part, not specified in this design. It is in the 3D model to show where a controller would sit. Drag to rotate.</figcaption>
+        </figure>
+      </section>
+
+      <section class="footnotes" aria-label="Sources for this page"><h2>Sources for this page</h2>
+        <ol>
+          <li id="fn-1">Theory note 01, Power System Basics: synchronous generators, inertia, and what changes with inverter-based sources. <a href="#fnref-1" aria-label="Back to text">↩</a></li>
+          <li id="fn-2">Implementation guide V4, Steps 18 and 19: Power Sensor (Three-Phase), then a Moving Average with a 60 Hz fundamental. <a href="#fnref-2" aria-label="Back to text">↩</a></li>
+          <li id="fn-3">Manual V7, Step 3: <code>vsmControl</code> code (J = 0.5, D = 150, clamp ±10 %, dt = 1e-5 s) and its correction (D = 10 insufficient; P0 = 0 drives the frequency to 54 Hz; P0 = 495.75 W for the single inverter). <a href="#fnref-3" aria-label="Back to text">↩</a></li>
+          <li id="fn-4">Manual V10, Step 3: D = 300 in inverter 2, P0 = 250 W in both inverters. <a href="#fnref-4" aria-label="Back to text">↩</a></li>
+          <li id="fn-5">Decision log D20: after the step at 0.5 s the V13 run had settled by about t = 1.0 s. <a href="#fnref-5" aria-label="Back to text">↩</a></li>
+          <li id="fn-6">Manual V7, correction of 2026-11-11: the phase must be the integral of frequency, not ω·t. <a href="#fnref-6" aria-label="Back to text">↩</a></li>
+          <li id="fn-7">V13, D26. <code>compare_v13xvs_8p4.txt</code>: base 8.4 Ω, a second 8.4 Ω switched in at 0.5 s, 2.0 s run. <a href="#fnref-7" aria-label="Back to text">↩</a></li>
+          <li id="fn-8">Manual V5, prerequisites; implementation guide V4, droop response validation and <code>droopControl</code> code. <a href="#fnref-8" aria-label="Back to text">↩</a></li>
+          <li id="fn-9">V13, D13; manual V13, Step 3. <a href="#fnref-9" aria-label="Back to text">↩</a></li>
+          <li id="fn-10">V13, D14: base load, Kp = 0.002. <a href="#fnref-10" aria-label="Back to text">↩</a></li>
+          <li id="fn-11">Decision log D21 (308 VAR, and 872 VAR with Kq = 0) and D26 (final 11 VAR). <a href="#fnref-11" aria-label="Back to text">↩</a></li>
+        </ol>
+      </section>
+
+      <nav class="pager"><a rel="prev" href="power-stage.html">Power stage and filter</a><a rel="next" href="voltage-loop.html">The voltage loop</a></nav>
+    </article>
+  </main>
+  <footer class="site-footer" data-site-footer></footer>
+
+  <script type="module">
+    // Illustrative model: a single machine. Swing equation J*dw/dt = P0 - P - D*(w - w0),
+    // forward Euler with dt = 1e-5 s (as in vsmControl), P through a one-cycle moving average.
+    const NS = 'http://www.w3.org/2000/svg';
+    const plot = document.getElementById('ws-plot');
+    const sJ = document.getElementById('ws-j'), oJ = document.getElementById('ws-j-out');
+    const sD = document.getElementById('ws-d'), oD = document.getElementById('ws-d-out');
+    const b1 = document.getElementById('ws-p1'), b2 = document.getElementById('ws-p2');
+    const readout = document.getElementById('ws-readout');
+
+    const J_STEPS = [0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20];
+    const PRESETS = {
+      p1: { D: 150, Pa: 385.2, Pb: 670.0 },    // V13, D26
+      p2: { D: 300, Pa: 520.3, Pb: 1090.0 }    // V13, D26
+    };
+    const P0 = 250, W0 = 2 * Math.PI * 60, T_END = 0.5, T_STEP = 0.05, DT = 1e-5;
+    const X0 = 64, X1 = 704, Y0 = 20, Y1 = 290;
+    let load = PRESETS.p1;
+
+    function el(name, attrs, text) {
+      const e = document.createElementNS(NS, name);
+      for (const k in attrs) e.setAttribute(k, attrs[k]);
+      if (text !== undefined) e.textContent = text;
+      return e;
+    }
+    const minus = (s) => s.replace('-', '−');
+
+    function simulate(J, D, Pa, Pb) {
+      let w = W0 - (Pa - P0) / D;
+      const n = Math.round(T_END / DT), pts = [];
+      let maxSlope = 0;
+      for (let i = 0; i <= n; i++) {
+        const t = i * DT;
+        const ramp = Math.min(1, Math.max(0, (t - T_STEP) * 60));   // one-cycle moving average of a step
+        const P = Pa + (Pb - Pa) * ramp;
+        const dw = (P0 - P - D * (w - W0)) / J;
+        if (i % 50 === 0) pts.push([t, w / (2 * Math.PI)]);
+        maxSlope = Math.max(maxSlope, Math.abs(dw) / (2 * Math.PI));
+        w += dw * DT;
+        w = Math.max(Math.min(w, W0 * 1.1), W0 * 0.9);
+      }
+      return { pts, fa: 60 - (Pa - P0) / (2 * Math.PI * D), fb: 60 - (Pb - P0) / (2 * Math.PI * D), maxSlope };
+    }
+
+    function niceStep(range) {
+      for (const s of [0.05, 0.1, 0.2, 0.5, 1, 2]) if (range / s <= 6) return s;
+      return 5;
+    }
+
+    function draw() {
+      const J = J_STEPS[parseInt(sJ.value, 10)], D = parseFloat(sD.value);
+      oJ.textContent = String(J); sJ.setAttribute('aria-valuetext', 'J = ' + J);
+      oD.textContent = String(D); sD.setAttribute('aria-valuetext', 'D = ' + D);
+      const res = simulate(J, D, load.Pa, load.Pb);
+      const ref = simulate(0.5, load.D, load.Pa, load.Pb);
+
+      let fmin = Math.min(res.fb, ref.fb, res.fa, ref.fa);
+      for (const p of res.pts) fmin = Math.min(fmin, p[1]);
+      const step = niceStep(60 - fmin + 0.05);
+      const lo = Math.floor((fmin - 0.02) / step) * step, hi = 60 + step * 0.5;
+      const xOf = (t) => X0 + (X1 - X0) * t / T_END;
+      const yOf = (f) => Y0 + (Y1 - Y0) * (hi - f) / (hi - lo);
+      const path = (pts) => pts.map((p, i) => (i ? 'L' : 'M') + xOf(p[0]).toFixed(1) + ' ' + yOf(p[1]).toFixed(1)).join('');
+
+      plot.replaceChildren();
+      for (let f = 60; f >= lo - 1e-9; f -= step) {
+        plot.append(el('line', { class: 'grid', x1: X0, x2: X1, y1: yOf(f), y2: yOf(f) }));
+        plot.append(el('text', { x: X0 - 8, y: yOf(f) + 4, 'text-anchor': 'end' }, f.toFixed(step < 0.1 ? 2 : 1)));
+      }
+      for (let t = 0; t <= T_END + 1e-9; t += 0.1) {
+        plot.append(el('text', { x: xOf(t), y: Y1 + 18, 'text-anchor': 'middle' }, t.toFixed(1)));
+      }
+      plot.append(el('text', { x: (X0 + X1) / 2, y: Y1 + 40, 'text-anchor': 'middle' }, 'time (s)'));
+      plot.append(el('text', { x: X0 + 4, y: Y0 - 6 }, 'Hz'));
+      plot.append(el('line', { class: 'mark', x1: xOf(T_STEP), x2: xOf(T_STEP), y1: Y0, y2: Y1 }));
+      plot.append(el('text', { x: xOf(T_STEP) + 6, y: Y1 - 8 }, 'load step'));
+      plot.append(el('path', { class: 'ghost', d: path(ref.pts) }));
+      plot.append(el('path', { class: 'wave', d: path(res.pts) }));
+      plot.append(el('text', { class: 't-ac', x: X1 - 6, y: Y0 + 14, 'text-anchor': 'end' }, 'frequency, J = ' + J + ', D = ' + D));
+
+      const tau = J / D * 1000;
+      readout.innerHTML = 'Before the step: <b>' + res.fa.toFixed(3) + ' Hz</b>. After: <b>' + res.fb.toFixed(3) + ' Hz</b>, a drop of ' +
+        (res.fa - res.fb).toFixed(3) + ' Hz. Time constant J/D: <b>' + (tau < 10 ? tau.toFixed(1) : tau.toFixed(0)) +
+        ' ms</b>. Steepest fall: <b>' + minus((-res.maxSlope).toFixed(1)) + ' Hz/s</b>.';
+    }
+
+    function usePreset(key) {
+      load = PRESETS[key];
+      sJ.value = '3';
+      sD.value = String(load.D);
+      b1.setAttribute('aria-pressed', String(key === 'p1'));
+      b2.setAttribute('aria-pressed', String(key === 'p2'));
+      draw();
+    }
+
+    sJ.addEventListener('input', draw);
+    sD.addEventListener('input', draw);
+    b1.addEventListener('click', () => usePreset('p1'));
+    b2.addEventListener('click', () => usePreset('p2'));
+    draw();
+  </script>
+</body>
+</html>

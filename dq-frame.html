@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Side chapter: the dq frame (V8) · Grid-Forming Inverter</title>
+  <meta name="description" content="What the dq transform does, what my V8 model built with it, and why it is a side branch that is not inside the final V13 machine.">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/detail.css">
+  <style>
+    /* Page-local styles for the dq widget (gw). */
+    .gw { display: grid; gap: var(--s-4); }
+    .gw-controls { display: flex; flex-wrap: wrap; gap: var(--s-4) var(--s-5); align-items: flex-end; }
+    .gw-field { display: grid; gap: 6px; flex: 1 1 240px; font: 500 14px/1.3 var(--font-sans); color: var(--ink-2); }
+    .gw-field output { font-family: var(--font-mono); color: var(--ink); }
+    .gw input[type="range"] { width: 100%; accent-color: var(--ac); min-height: 28px; }
+    .gw input:focus-visible, .gw button:focus-visible { outline: 2px solid var(--ac); outline-offset: 3px; }
+    .gw-btn { font: 500 14px/1 var(--font-sans); color: var(--ink); background: var(--night-2); border: 1px solid var(--night-4); border-radius: var(--radius); padding: 10px 16px; min-height: 40px; cursor: pointer; }
+    .gw-btn:hover { background: var(--night-3); }
+    .gw-plot { display: block; width: 100%; height: auto; background: var(--night-0); border: 1px solid var(--night-3); border-radius: var(--radius); }
+    .gw-plot text { font-family: var(--font-mono); font-size: 11px; fill: var(--ink-3); stroke: none; }
+    .gw-plot .grid { stroke: var(--night-3); stroke-width: 1; fill: none; }
+    .gw-plot .ring { stroke: var(--night-4); stroke-width: 1.5; fill: none; }
+    .gw-plot .ax { stroke: var(--night-4); stroke-width: 1; fill: none; stroke-dasharray: 3 5; }
+    .gw-plot .frame { stroke-width: 2; fill: none; stroke-linecap: round; }
+    .gw-plot .fd { stroke: var(--ctl); }
+    .gw-plot .fq { stroke: var(--ink-2); }
+    .gw-plot .vec { stroke: var(--ac); stroke-width: 3; fill: none; stroke-linecap: round; }
+    .gw-plot .dot { fill: var(--ac); }
+    .gw-plot .sa { stroke: var(--ac); stroke-width: 1.8; fill: none; stroke-linejoin: round; }
+    .gw-plot .sb { stroke: var(--dc); stroke-width: 1.8; fill: none; stroke-linejoin: round; }
+    .gw-plot .sc { stroke: var(--inv1); stroke-width: 1.8; fill: none; stroke-linejoin: round; }
+    .gw-plot .sd { stroke: var(--ctl); stroke-width: 3; fill: none; stroke-linejoin: round; }
+    .gw-plot .sq { stroke: var(--ink); stroke-width: 3; fill: none; stroke-linejoin: round; }
+    .gw-plot text.t-a { fill: var(--ac); } .gw-plot text.t-b { fill: var(--dc); } .gw-plot text.t-c { fill: var(--inv1); }
+    .gw-plot text.t-d { fill: var(--ctl); } .gw-plot text.t-q { fill: var(--ink); }
+    .gw-readout { margin: 0; font: 13px/1.6 var(--font-mono); color: var(--ink-2); }
+    .gw-readout b { color: var(--ink); font-weight: 500; }
+  </style>
+  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }</script>
+  <script type="module" src="js/detail/detail.js"></script>
+</head>
+<body class="detail" data-page="dq-frame">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header" data-site-header></header>
+  <main id="main">
+    <article class="page">
+      <header class="page-head">
+        <p class="eyebrow">Side chapter · not part of the final machine</p>
+        <h1>Side chapter: the dq frame (V8)</h1>
+        <p class="lede">In V8 I tried controlling the inverter in a rotating frame, where three sine waves turn into two steady numbers. It worked in simulation. It is also a branch I left behind: the final machine, V13, does not use it.</p>
+        <p class="back-links"><a href="index.html">Back to the journey</a></p>
+      </header>
+
+      <div class="results">
+        <div class="result"><span class="value">Vd = 1.0</span><span class="label">Held steady after the controller settled</span><span class="src">Manual V8</span></div>
+        <div class="result"><span class="value">Vq = 0</span><span class="label">The second number, held at zero</span><span class="src">Manual V8</span></div>
+      </div>
+
+      <section id="what-it-does">
+        <h2>What the dq transform does</h2>
+        <p>A three-phase voltage is three sine waves, 120° apart. Controlling a sine is awkward because its value never stops changing. A controller that wants to hold something steady has nothing steady to hold.</p>
+        <p>The dq transform fixes that by changing the point of view. Imagine the three voltages as one arrow that spins at 60 Hz. Now stand on a frame that spins along with it. From there the arrow does not move. It has a fixed length and a fixed direction, so it is described by two steady numbers: <var>d</var>, the part along the frame's first axis, and <var>q</var>, the part at right angles to it. If the frame is locked to the voltage, <var>d</var> is the amplitude and <var>q</var> is zero.</p>
+        <p>It takes two steps. The Clarke transform turns the three phase values into two perpendicular components (α, β) in the fixed frame. The Park transform then rotates those by the frame angle θ:</p>
+        <p class="eq"><var>α</var> = (2/3)(<var>v</var><sub>a</sub> − <var>v</var><sub>b</sub>/2 − <var>v</var><sub>c</sub>/2),&nbsp; <var>β</var> = (<var>v</var><sub>b</sub> − <var>v</var><sub>c</sub>)/√3</p>
+        <p class="eq"><var>v</var><sub>d</sub> = <var>α</var>·cos <var>θ</var> + <var>β</var>·sin <var>θ</var>,&nbsp; <var>v</var><sub>q</sub> = −<var>α</var>·sin <var>θ</var> + <var>β</var>·cos <var>θ</var></p>
+        <p>If the voltage is <var>v</var><sub>a</sub> = cos <var>θ</var><sub>v</sub> and so on, these work out to <var>v</var><sub>d</sub> = cos(<var>θ</var><sub>v</sub> − <var>θ</var>) and <var>v</var><sub>q</sub> = sin(<var>θ</var><sub>v</sub> − <var>θ</var>). They are constant whenever the frame angle follows the voltage angle. The widget below shows it. The frequency is slowed down so you can watch.</p>
+
+        <figure class="widget" data-illustrative id="w-dq">
+          <div class="gw">
+            <div class="gw-controls">
+              <button type="button" class="gw-btn" id="wd-play" aria-pressed="false">Play</button>
+              <label class="gw-field" for="wd-delta">
+                <span>Frame lags the voltage by: <output id="wd-delta-out" for="wd-delta">0°</output></span>
+                <input type="range" id="wd-delta" min="-90" max="90" step="1" value="0" aria-valuetext="0 degrees">
+              </label>
+            </div>
+            <svg class="gw-plot" id="wd-plot" viewBox="0 0 720 330" role="img" aria-label="Left: a rotating voltage vector with a rotating d and q frame. Right: the three phase sine waves and the two flat d and q lines computed from them."></svg>
+            <p class="gw-readout" id="wd-readout">This widget needs JavaScript. With the frame locked to the voltage, d stays at 1 and q stays at 0 while the three phases keep oscillating.</p>
+          </div>
+          <figcaption>Illustrative model, not the Simulink result. The left side shows the voltage vector and the rotating d and q axes. The right side shows the three phases (cyan, amber, green) and the d and q values (magenta and white) computed from them with the Clarke and Park equations above. Move the slider to let the frame fall behind and watch d and q shift to steady values that are no longer 1 and 0.</figcaption>
+        </figure>
+      </section>
+
+      <section id="v8">
+        <h2>What V8 built</h2>
+        <p>V8 is V7 (the virtual synchronous machine) with the voltage loop replaced<sup class="fn"><a href="#fn-1" id="fnref-1">1</a></sup>. The measured phase voltages go through the Clarke and Park transforms, using an angle that I get by integrating the frequency from the VSM block. I scale the voltages by 1/12.8 first, so they sit in a range the controllers can work with<sup class="fn"><a href="#fn-1">1</a></sup>.</p>
+        <p>Two PI controllers replace the three I had before. One drives <var>v</var><sub>d</sub> to a reference of 1, with <var>P</var> = 0.065 and <var>I</var> = 0.5. The other drives <var>v</var><sub>q</sub> to 0, with <var>P</var> = 0.001 and <var>I</var> = 0.5<sup class="fn"><a href="#fn-1">1</a></sup>. Their outputs go through the inverse Park transform, which turns two steady numbers back into three sine-shaped modulation signals for the converter, with a saturation of ±500<sup class="fn"><a href="#fn-1">1</a></sup>. The sine voltage reference block from earlier versions was deleted, because the references are now just the constants 1 and 0.</p>
+        <figure class="img"><img src="assets/img/v8_control_simulink.webp" alt="Simulink diagram of the V8 control: three phase voltages with scaling gains feed Clarke and Clarke-to-Park transform blocks, two PI controllers for d and q, an inverse Park transform and a saturation block that feeds the converter modulation input." loading="lazy" width="1600" height="651"><figcaption>The V8 control in Simulink. It is dense, and that is why I explain it with the widget instead.</figcaption></figure>
+      </section>
+
+      <section id="result">
+        <h2>What it showed</h2>
+        <p>I ran it for 2.0 s. <var>v</var><sub>d</sub> settled at 1.0 and <var>v</var><sub>q</sub> at 0.0, and the three output voltages were clean, symmetric sines with zero DC offset<sup class="fn"><a href="#fn-1">1</a></sup>. That matched the idea: once the controller sees steady numbers, it can hold them exactly.</p>
+        <p>There is a reason this appealed to me. A PI controller's integrator is built for steady values. Fed a sine wave directly, an integrator can drift, and later I found exactly that in my abc-frame loops: a DC offset of about 18 V hiding on one phase<sup class="fn"><a href="#fn-2" id="fnref-2">2</a></sup>. In the dq frame the integrator never sees a sine.</p>
+      </section>
+
+      <section id="not-in-v13">
+        <h2>Why it is not in the final machine</h2>
+        <p>V8 and V9 branch off V7 and stop there. The final model, V13, grows from V7 through the two-inverter model (V10) and the current-limit work (V12). Its voltage loop works in the abc frame: a proportional gain of 0.002 plus a feed-forward term of 1/200, with no integrator<sup class="fn"><a href="#fn-3" id="fnref-3">3</a></sup>. So nothing in V13's signal chain uses the Clarke or Park transforms.</p>
+        <aside class="note">
+          <p>I am showing V8 here because I built it and it worked, not because it is part of the answer. The page on the <a href="voltage-loop.html">voltage loop</a> covers the loop that is in the final machine.</p>
+        </aside>
+        <p>The next side chapter, on the <a href="pll.html">phase-locked loop</a>, is the other branch from V7.</p>
+      </section>
+
+      <section class="footnotes" aria-label="Sources for this page"><h2>Sources for this page</h2>
+        <ol>
+          <li id="fn-1">Manual V8, Steps 1 to 8 and validation: Clarke then Clarke-to-Park (power invariant off), angle from the VSM frequency, gains of 1/12.8, PI<sub>d</sub> (<var>P</var> = 0.065, <var>I</var> = 0.5) and PI<sub>q</sub> (<var>P</var> = 0.001, <var>I</var> = 0.5), inverse Park, saturation ±500, 2.0 s run with <var>V</var><sub>d</sub> = 1.0 and <var>V</var><sub>q</sub> = 0.0. <a href="#fnref-1" aria-label="Back to text">↩</a></li>
+          <li id="fn-2">LinkedIn post handoff, story 3, and decision log D13: an 18 V DC offset from a PI integrator acting on a sine wave. <a href="#fnref-2" aria-label="Back to text">↩</a></li>
+          <li id="fn-3">Brief section 2 (control path, step 7) and decision log D13: voltage loop <var>K</var><sub>p</sub> = 0.002 plus feed-forward 1/200, no integrator. <a href="#fnref-3" aria-label="Back to text">↩</a></li>
+        </ol>
+      </section>
+
+      <nav class="pager"><a rel="prev" href="packaging-thermal.html">Packaging and thermal</a><a rel="next" href="pll.html">Side chapter: PLL grid sync (V9)</a></nav>
+    </article>
+  </main>
+  <footer class="site-footer" data-site-footer></footer>
+
+  <script type="module">
+    // Illustrative model: a unit voltage vector, the Clarke and Park transforms, and scrolling traces.
+    // Frequency is slowed to 0.5 Hz so the motion is visible.
+    const NS = 'http://www.w3.org/2000/svg';
+    const plot = document.getElementById('wd-plot');
+    const playBtn = document.getElementById('wd-play');
+    const slider = document.getElementById('wd-delta');
+    const out = document.getElementById('wd-delta-out');
+    const readout = document.getElementById('wd-readout');
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const W = 2 * Math.PI * 0.5, WINDOW = 4, N = 200, DT = WINDOW / N;
+    const CX = 150, CY = 170, R = 110;
+    const PX0 = 340, PX1 = 704, PYM = 170, PA = 95;
+    let delta = 0, t = 0, acc = 0, last = 0, playing = false;
+    let buf = [];
+
+    function el(name, attrs, text, parent) {
+      const e = document.createElementNS(NS, name);
+      for (const k in attrs) e.setAttribute(k, attrs[k]);
+      if (text != null) e.textContent = text;
+      (parent || plot).append(e);
+      return e;
+    }
+
+    function sample(time) {
+      const tv = W * time, th = tv - delta * Math.PI / 180;
+      const a = Math.cos(tv), b = Math.cos(tv - 2 * Math.PI / 3), c = Math.cos(tv + 2 * Math.PI / 3);
+      const al = (2 / 3) * (a - b / 2 - c / 2), be = (b - c) / Math.sqrt(3);
+      return { time, a, b, c, d: al * Math.cos(th) + be * Math.sin(th), q: -al * Math.sin(th) + be * Math.cos(th) };
+    }
+
+    function rebuild() {
+      buf = [];
+      for (let i = 0; i < N; i++) buf.push(sample(t - (N - 1 - i) * DT));
+    }
+
+    const pathOf = (key) => buf.map((s, i) => (i ? 'L' : 'M') + (PX0 + (PX1 - PX0) * i / (N - 1)).toFixed(1) + ' ' + (PYM - s[key] * PA).toFixed(1)).join('');
+
+    function draw() {
+      plot.replaceChildren();
+      // left panel: vector and rotating frame
+      el('circle', { class: 'ring', cx: CX, cy: CY, r: R });
+      el('line', { class: 'ax', x1: CX - R - 8, x2: CX + R + 8, y1: CY, y2: CY });
+      el('line', { class: 'ax', x1: CX, x2: CX, y1: CY - R - 8, y2: CY + R + 8 });
+      el('text', { x: CX, y: 24, 'text-anchor': 'middle' }, 'fixed frame, phase a along the right-hand axis');
+      const tv = W * t, th = tv - delta * Math.PI / 180;
+      const pt = (ang, len) => [CX + len * Math.cos(ang), CY - len * Math.sin(ang)];
+      const [dx, dy] = pt(th, R * 0.95), [qx, qy] = pt(th + Math.PI / 2, R * 0.95);
+      el('line', { class: 'frame fd', x1: CX, y1: CY, x2: dx, y2: dy });
+      el('line', { class: 'frame fq', x1: CX, y1: CY, x2: qx, y2: qy });
+      const [lx, ly] = pt(th, R + 14), [mx, my] = pt(th + Math.PI / 2, R + 14);
+      el('text', { class: 't-d', x: lx, y: ly + 4, 'text-anchor': 'middle' }, 'd');
+      el('text', { class: 't-q', x: mx, y: my + 4, 'text-anchor': 'middle' }, 'q');
+      const [vx, vy] = pt(tv, R * 0.8);
+      el('line', { class: 'vec', x1: CX, y1: CY, x2: vx, y2: vy });
+      el('circle', { class: 'dot', cx: vx, cy: vy, r: 5 });
+      el('text', { x: CX, y: 318, 'text-anchor': 'middle' }, 'voltage vector (cyan), rotating d and q axes');
+      // right panel: traces
+      for (const v of [1, 0, -1]) {
+        el('line', { class: 'grid', x1: PX0, x2: PX1, y1: PYM - v * PA, y2: PYM - v * PA });
+        el('text', { x: PX0 - 6, y: PYM - v * PA + 4, 'text-anchor': 'end' }, (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v));
+      }
+      el('path', { class: 'sa', d: pathOf('a') });
+      el('path', { class: 'sb', d: pathOf('b') });
+      el('path', { class: 'sc', d: pathOf('c') });
+      el('path', { class: 'sd', d: pathOf('d') });
+      el('path', { class: 'sq', d: pathOf('q') });
+      el('text', { class: 't-a', x: PX0, y: 24 }, 'a');
+      el('text', { class: 't-b', x: PX0 + 18, y: 24 }, 'b');
+      el('text', { class: 't-c', x: PX0 + 36, y: 24 }, 'c');
+      el('text', { class: 't-d', x: PX0 + 70, y: 24 }, 'd');
+      el('text', { class: 't-q', x: PX0 + 88, y: 24 }, 'q');
+      el('text', { x: (PX0 + PX1) / 2, y: 318, 'text-anchor': 'middle' }, 'last 4 seconds (slowed down: 0.5 Hz instead of 60 Hz)');
+      const s = buf[buf.length - 1];
+      readout.innerHTML = 'Right now: a = <b>' + s.a.toFixed(2) + '</b>, b = <b>' + s.b.toFixed(2) + '</b>, c = <b>' + s.c.toFixed(2) +
+        '</b> and still moving. d = <b>' + s.d.toFixed(2) + '</b>, q = <b>' + s.q.toFixed(2) + '</b>.';
+    }
+
+    function frame(now) {
+      if (!playing) return;
+      const dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      acc += dt;
+      while (acc >= DT) { acc -= DT; t += DT; buf.push(sample(t)); buf.shift(); }
+      draw();
+      requestAnimationFrame(frame);
+    }
+
+    function setPlaying(on) {
+      playing = on;
+      playBtn.textContent = on ? 'Pause' : 'Play';
+      playBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      if (on) { last = performance.now(); requestAnimationFrame(frame); }
+    }
+
+    slider.addEventListener('input', () => {
+      delta = parseFloat(slider.value);
+      out.textContent = delta + '°';
+      slider.setAttribute('aria-valuetext', delta + ' degrees');
+      if (!playing) { rebuild(); draw(); }
+    });
+    playBtn.addEventListener('click', () => setPlaying(!playing));
+
+    t = WINDOW;
+    rebuild();
+    draw();
+    if (!reduced) setPlaying(true);
+  </script>
+</body>
+</html>

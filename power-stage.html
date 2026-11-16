@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Power stage and filter · Grid-Forming Inverter</title>
+  <meta name="description" content="How my grid-forming inverter design turns 400 V DC into a clean three-phase 60 Hz wave: the DC bus, six switches at 10 kHz, the LC filter, the tie to the shared bus and the load.">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/detail.css">
+  <style>
+    /* Page-local styles for the hand-drawn diagrams (gd) and the small widgets (gw) on this page. */
+    .gd-scroll { overflow-x: auto; }
+    .gd-scroll:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+    svg.gd { display: block; width: 100%; min-width: 560px; height: auto; }
+    svg.gd .bx { fill: var(--night-2); stroke: var(--night-4); stroke-width: 1.5; }
+    svg.gd .ln { fill: none; stroke: var(--ink-3); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+    svg.gd .ln.c-ac { stroke: var(--ac); fill: none; }
+    svg.gd .ln.c-dc { stroke: var(--dc); fill: none; }
+    svg.gd .ln.c-inv2 { stroke: var(--inv2); fill: none; }
+    svg.gd .dash { stroke-dasharray: 5 6; }
+    svg.gd .mk { stroke: none; fill: var(--ink-3); }
+    svg.gd .mk.c-ac { fill: var(--ac); }
+    svg.gd .mk.c-dc { fill: var(--dc); }
+    svg.gd .mk.c-inv2 { fill: var(--inv2); }
+    svg.gd text { font-family: var(--font-sans); font-size: 14px; fill: var(--ink); stroke: none; }
+    svg.gd text.sub { font-family: var(--font-mono); font-size: 12px; fill: var(--ink-2); }
+    svg.gd text.lbl { font-size: 12px; fill: var(--ink-3); }
+    svg.gd text.c-ac { fill: var(--ac); }
+    svg.gd text.c-dc { fill: var(--dc); }
+    svg.gd text.c-inv2 { fill: var(--inv2); }
+
+    .gw { display: grid; gap: var(--s-4); }
+    .gw-controls { display: flex; flex-wrap: wrap; gap: var(--s-4) var(--s-5); align-items: flex-end; }
+    .gw-field { display: grid; gap: 6px; flex: 1 1 240px; font: 500 14px/1.3 var(--font-sans); color: var(--ink-2); }
+    .gw-field output { font-family: var(--font-mono); color: var(--ink); }
+    .gw input[type="range"] { width: 100%; accent-color: var(--ac); min-height: 28px; }
+    .gw-check { display: inline-flex; gap: 8px; align-items: center; font: 500 14px/1.3 var(--font-sans); color: var(--ink-2); min-height: 28px; }
+    .gw-check input { accent-color: var(--ac); width: 18px; height: 18px; }
+    .gw input:focus-visible { outline: 2px solid var(--ac); outline-offset: 3px; }
+    .gw-plot { display: block; width: 100%; height: auto; background: var(--night-0); border: 1px solid var(--night-3); border-radius: var(--radius); }
+    .gw-plot text { font-family: var(--font-mono); font-size: 11px; fill: var(--ink-3); stroke: none; }
+    .gw-plot .grid { stroke: var(--night-3); stroke-width: 1; fill: none; }
+    .gw-plot .target { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 3 5; fill: none; }
+    .gw-plot .pulse { stroke: var(--dc); stroke-width: 1; fill: none; opacity: 0.55; }
+    .gw-plot .wave { stroke: var(--ac); stroke-width: 2; fill: none; stroke-linejoin: round; }
+    .gw-plot text.t-dc { fill: var(--dc); }
+    .gw-plot text.t-ac { fill: var(--ac); }
+    .gw-readout { margin: 0; font: 13px/1.6 var(--font-mono); color: var(--ink-2); }
+    .gw-readout b { color: var(--ink); font-weight: 500; }
+  </style>
+  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }</script>
+  <script type="module" src="js/detail/detail.js"></script>
+</head>
+<body class="detail" data-page="power-stage">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header" data-site-header></header>
+  <main id="main">
+    <article class="page">
+      <header class="page-head">
+        <p class="eyebrow">Inside the design · Stations 06–08</p>
+        <h1>Power stage and filter</h1>
+        <p class="lede">Before any control can happen, something has to turn DC into three-phase AC. This page follows the power from the 400 V DC bus, through six switches and an LC filter, out to the load. Everything here comes from my simulation and my packaging design. No hardware was built.</p>
+        <p class="back-links">
+          <a href="index.html#s06">Back to the journey, station 06</a>
+          <a href="index.html#s07">Station 07</a>
+          <a href="index.html#s08">Station 08</a>
+        </p>
+      </header>
+
+      <div class="results">
+        <div class="result"><span class="value">400 V</span><span class="label">DC bus, so ±200 V per phase</span><span class="src">Manual V11, V12</span></div>
+        <div class="result"><span class="value">10 kHz</span><span class="label">Switching frequency in the hardware design</span><span class="src">Manual V11</span></div>
+        <div class="result"><span class="value">≈ 800 Hz</span><span class="label">LC filter resonance (2 mH, 20 µF)</span><span class="src">Manual V13, D21</span></div>
+        <div class="result"><span class="value">71.5 V</span><span class="label">Peak output voltage per phase, 60 Hz</span><span class="src">V13, D13</span></div>
+      </div>
+
+      <section id="power-path">
+        <h2>The power path at a glance</h2>
+        <p>The power path of one inverter is short: a DC source, a three-phase converter, an LC filter on each phase, a small tie impedance, and then the bus where the load sits. In the final model (V13) two of these chains feed the same bus.</p>
+
+<p>Here is the same path as I first built it in Simscape, in the very first version of the model. It reads right to left: the DC source, the converter block, three inductors, three capacitors with voltage sensors across them, three current sensors, and the load.</p>
+
+        <figure class="img"><img src="assets/img/power_stage_diagram.webp" alt="Simscape model of the power stage: a DC voltage source on the right feeds a three-phase converter block; its three outputs each pass through an inductor, with a capacitor and a voltage sensor from each phase to ground, then through current sensors to a three-phase resistive load on the left." loading="lazy" width="1064" height="718"><figcaption>The power stage as a Simscape model. In this early version three sine sources drive the converter directly. The control loops replaced them in later versions.</figcaption></figure>
+      </section>
+
+      <section id="dc-bus">
+        <h2>The DC side: 400 V and two capacitors</h2>
+        <p>The input is a 400 V DC source<sup class="fn"><a href="#fn-1" id="fnref-1">1</a></sup>. In a real installation that would be a battery or the DC side of a solar array. In my models it is an ideal source.</p>
+        <p>Each phase of the converter can connect its output to the top DC rail or to the bottom one. Measured from the middle of the DC bus, that is +200 V or −200 V, so each phase has ±200 V to work with. In the model this number shows up as a parameter called <code>Vdc_half = 200</code><sup class="fn"><a href="#fn-1">1</a></sup>. The controller's output for each phase is a number between −1 and +1 called the modulation, and the converter turns it into a voltage by multiplying it by 200 V:</p>
+        <p class="eq"><var>v</var><sub>phase</sub> = <var>m</var> × <var>V</var><sub>dc</sub>/2 = <var>m</var> × 200 V</p>
+        <p>The output I want is about 71.5 V peak per phase<sup class="fn"><a href="#fn-2" id="fnref-2">2</a></sup>, so the modulation only needs to reach about 0.36 (71.5 / 200 = 0.3575). The controller uses roughly a third of the range it has, which leaves room for transients.</p>
+        <p>For the hardware design I put two DC-link capacitors on the bus, 220 µF and 450 V each<sup class="fn"><a href="#fn-3" id="fnref-3">3</a></sup>. Their job is to be an energy buffer right next to the switches, so the DC voltage stays stiff while the switches draw current in pulses. The ideal source in the simulation does not need them, so they come from the packaging step (V11) and not from the control models.</p>
+
+        <figure class="part-viewer" data-model="assets/models/inverter/unit.glb" data-nodes="dclink_cap_1"
+                data-poster="assets/renders/dclink_cap.webp" data-tier="B"
+                data-callouts='[{"node":"dclink_cap_1","text":"Energy buffer on the 400 V side: keeps the DC voltage stiff while the switches chop it"}]'>
+          <figcaption>DC-link capacitor. Representative part, shape only: the design specifies the values (2 × 220 µF, 450 V), and the shape is a typical snap-in electrolytic capacitor of that rating. Drag to rotate.</figcaption>
+        </figure>
+      </section>
+
+      <section id="switches">
+        <h2>Six switches: the converter</h2>
+        <p>The converter is a three-phase bridge: six switches, two per phase. Each pair connects its phase to the top rail or to the bottom rail, and by switching back and forth quickly it can make any average voltage in between.</p>
+        <p>In simulation I used an average-value voltage-source converter<sup class="fn"><a href="#fn-4" id="fnref-4">4</a></sup>. That block does not model the individual switching events. It takes the three modulation signals and outputs the average voltage the switches would produce over each switching period. This is a common choice for control design, because the model runs much faster and the control loops only react to the average anyway.</p>
+        <aside class="note">
+          <p>The honest consequence: my simulations contain no PWM pulses and no switching ripple. The chopped pulses at station 07 on the home page, and in the widget further down this page, are stylised. They show what the switches in the hardware design would do. They are not something I simulated.</p>
+        </aside>
+        <p>For the hardware design I picked an Infineon IKCM20L60GD<sup class="fn"><a href="#fn-3">3</a></sup>. It is an intelligent power module (IPM): six IGBTs, six diodes and the gate drivers in one 36 × 21 mm package, rated 600 V and 20 A. With the gate drivers inside, the controller only has to send logic-level signals. The module also has short-circuit protection built in<sup class="fn"><a href="#fn-5" id="fnref-5">5</a></sup>. That matters for faults: my software current limiter works from a one-cycle average of the current, so it is too slow for the first cycles of a fault. In hardware the module's own protection would have to cover those. The details are on the <a href="current-limiting.html">current limiting page</a>.</p>
+        <p>I set the switching frequency to 10 kHz<sup class="fn"><a href="#fn-3">3</a></sup>. Faster switching makes the filter's job easier, but every switching event costs a little energy that ends up as heat in the module. In my thermal model, 16 kHz put the IGBT junction at 162 °C under heavy load, above the 150 °C the module allows<sup class="fn"><a href="#fn-3">3</a></sup>. At 10 kHz the same model gave 104.5 °C, and 110.6 °C once I replaced the hand-calculated heatsink value with the FEA one. Both are under my 125 °C design limit<sup class="fn"><a href="#fn-6" id="fnref-6">6</a></sup>. The thermal side is on the <a href="packaging-thermal.html">packaging and thermal page</a>.</p>
+
+        <figure class="part-viewer" data-model="assets/models/inverter/unit.glb" data-nodes="ipm,ipm_pins,thermal_pad"
+                data-poster="assets/renders/ipm.webp" data-tier="A"
+                data-callouts='[{"node":"ipm","text":"Six IGBTs, six diodes and the gate drivers in one moulded package"},{"node":"ipm_pins","text":"Leads up to the board above (a placeholder in my CAD, not a designed PCB)"},{"node":"thermal_pad","text":"Thermal pad, 0.25 mm, between the module and the heatsink"}]'>
+          <figcaption>Infineon IKCM20L60GD, 600 V / 20 A, 36 × 21 mm, switched at 10 kHz in the design. Drag to rotate.</figcaption>
+        </figure>
+      </section>
+
+      <section id="filter">
+        <h2>The LC filter: pulses in, sine out</h2>
+        <p>What leaves the switches in hardware is a train of ±200 V pulses, 10,000 per second, whose width follows a 60 Hz sine. The LC filter keeps the 60 Hz and removes the pulses. Each phase has a 2 mH inductor in series and a 20 µF capacitor from the phase to ground<sup class="fn"><a href="#fn-7" id="fnref-7">7</a></sup>. The inductor resists fast changes in current. The capacitor resists fast changes in voltage. Together they are a low-pass filter.</p>
+        <p>The frequency where the filter stops passing and starts blocking is its resonance:</p>
+        <p class="eq"><var>f</var><sub>res</sub> = 1 / (2π·√(<var>L</var>·<var>C</var>)) = 1 / (2π·√(0.002 × 0.00002)) = 1 / (2π × 0.0002) ≈ 796 Hz</p>
+        <p>I round that to 800 Hz<sup class="fn"><a href="#fn-7">7</a></sup>. It sits where it should: 60 Hz is about 13 times below it and passes almost untouched, and 10 kHz is about 12.5 times above it and is cut hard.</p>
+        <p>The inductor is not free at 60 Hz, though. Its reactance there is</p>
+        <p class="eq"><var>X</var><sub>L</sub> = 2π·<var>f</var>·<var>L</var> = 2π × 60 × 0.002 ≈ 0.75 Ω</p>
+        <p>That 0.75 Ω<sup class="fn"><a href="#fn-7">7</a></sup> turned out to matter a lot later. When I made the voltage loop regulate the capacitor voltage properly, this reactance stopped acting as a buffer between the two inverters, and I had to put it back in software. That story is on the <a href="parallel.html">parallel operation page</a>.</p>
+        <p>The widget below shows the idea. It is one phase with ideal switches, the real <var>L</var> and <var>C</var> values and an 8.4 Ω load. Lower the switching frequency and watch the ripple grow as it gets closer to the resonance.</p>
+
+        <figure class="widget" data-illustrative id="w-filter">
+          <div class="gw">
+            <div class="gw-controls">
+              <label class="gw-field" for="wf-fsw">
+                <span>Switching frequency: <output id="wf-fsw-out" for="wf-fsw">10 kHz</output></span>
+                <input type="range" id="wf-fsw" min="1" max="10" step="0.5" value="10" aria-valuetext="10 kilohertz">
+              </label>
+              <label class="gw-check" for="wf-pulses"><input type="checkbox" id="wf-pulses" checked> Show the pulses from the switches</label>
+            </div>
+            <svg class="gw-plot" id="wf-plot" viewBox="0 0 720 320" role="img" aria-label="Plot of one 60 hertz cycle: the switch output as plus and minus 200 volt pulses, and the smooth capacitor voltage after the LC filter."></svg>
+            <p class="gw-readout" id="wf-readout">This plot needs JavaScript. At 10 kHz the filtered wave is a 60 Hz sine of about 71 V peak with a ripple of a volt or two.</p>
+          </div>
+          <figcaption>Illustrative model, not the Simulink result. One phase, ideal switches comparing a 60 Hz reference with a triangle carrier, then 2 mH, 20 µF and an 8.4 Ω resistor. My Simulink models use an average-value converter and contain no pulses.</figcaption>
+        </figure>
+
+        <figure class="part-viewer" data-model="assets/models/inverter/unit.glb" data-nodes="inductor_a"
+                data-poster="assets/renders/inductor.webp" data-tier="B"
+                data-callouts='[{"node":"inductor_a","text":"2 mH per phase: resists fast changes in current, so the pulses become a smooth current"}]'>
+          <figcaption>Filter inductor, one of three. Representative part, shape only: the design specifies 2 mH on a toroid with a 58 mm outside diameter; the rest of the shape is a typical toroid of that size. Drag to rotate.</figcaption>
+        </figure>
+
+        <figure class="part-viewer" data-model="assets/models/inverter/unit.glb" data-nodes="filter_cap_a"
+                data-poster="assets/renders/filter_cap.webp" data-tier="B"
+                data-callouts='[{"node":"filter_cap_a","text":"20 µF per phase: smooths the voltage; this is the voltage the controller regulates"}]'>
+          <figcaption>Filter capacitor, one of three. Representative part, shape only: the design specifies 20 µF film per phase; the shape is a typical box film capacitor of that value. Drag to rotate.</figcaption>
+        </figure>
+      </section>
+
+      <section id="bus-load">
+        <h2>After the filter: tie, bus and load</h2>
+        <p>The voltage on the filter capacitor is what the controller regulates: about 71.5 V peak per phase at 60 Hz<sup class="fn"><a href="#fn-2">2</a></sup>. From there each inverter reaches the shared bus through a small tie impedance, 0.05 Ω and 0.2 mH per phase<sup class="fn"><a href="#fn-8" id="fnref-8">8</a></sup>. At 60 Hz the 0.2 mH is about 0.075 Ω (2π × 60 × 0.0002), so the tie is small. It stands for the cable between an inverter and the bus.</p>
+        <p>The load sits on the shared bus. The base load is 8.4 Ω per phase, purely resistive<sup class="fn"><a href="#fn-9" id="fnref-9">9</a></sup>. In the final model the two inverters together deliver about 0.9 kW into it (385.2 W and 520.3 W)<sup class="fn"><a href="#fn-10" id="fnref-10">10</a></sup>. Each test then switches something extra onto the bus at a set time:</p>
+
+        <div class="table-wrap"><table class="data">
+          <caption>Loads on the shared bus in the V13 tests<sup class="fn"><a href="#fn-9">9</a></sup></caption>
+          <thead><tr><th scope="col">Test</th><th scope="col">Switched in, per phase</th><th scope="col">What it checks</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Base load</th><td>8.4 Ω resistive, always connected</td><td>Normal operation</td></tr>
+            <tr><th scope="row">Load step</th><td>a second 8.4 Ω in parallel</td><td>Load sharing between the two inverters</td></tr>
+            <tr><th scope="row">Overload</th><td>4.2 Ω in parallel</td><td>Behaviour near the current rating</td></tr>
+            <tr><th scope="row">Bolted fault</th><td>0.5 Ω + 1 mH</td><td>The current limit</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>P and Q</h3>
+        <p>A resistor only draws active power, <var>P</var>, the kind that does work. Many real loads also have inductance (motors, transformers), and an inductive load makes the current lag behind the voltage. That adds reactive power, <var>Q</var>. It moves back and forth between source and load every cycle without doing net work, but the inverter still has to carry it as current.</p>
+        <p>I tested that in V5, with a single inverter, by changing the load to 8.4 Ω in series with 20 mH per phase. The impedance per phase went from 8.4 Ω to 11.3 Ω, and the inverter delivered <var>P</var> ≈ 500 W and <var>Q</var> ≈ 410 VAR<sup class="fn"><a href="#fn-11" id="fnref-11">11</a></sup>. <var>Q</var> is what the voltage droop reacts to, which is covered on the <a href="inertia-droop.html#droop">inertia and droop page</a>.</p>
+      </section>
+
+      <section class="footnotes" aria-label="Sources for this page"><h2>Sources for this page</h2>
+        <ol>
+          <li id="fn-1">Implementation guide V1 (DC voltage source 400 V); manual V12, model parameter <code>Vdc_half = 200</code>. <a href="#fnref-1" aria-label="Back to text">↩</a></li>
+          <li id="fn-2">V13, D13. Measured capacitor voltage 71.4 V peak, reference <var>V</var><sub>0</sub> = 71.5 V; modulation fundamental 0.357. <a href="#fnref-2" aria-label="Back to text">↩</a></li>
+          <li id="fn-3">Manual V11, Step 1 (hardware selection): Infineon CIPOS Mini IKCM20L60GD, 600 V / 20 A, 36 × 21 mm, <var>T</var><sub>j</sub> max 150 °C; 10 kHz, and 162 °C at 16 kHz under heavy load; DC link 2 × 220 µF 450 V; filter 3 × 2 mH toroids (OD 58 mm) and 3 × 20 µF film. <a href="#fnref-3" aria-label="Back to text">↩</a></li>
+          <li id="fn-4">Implementation guide V1: Average-Value Voltage Source Converter (Three-Phase), modulation wave input. <a href="#fnref-4" aria-label="Back to text">↩</a></li>
+          <li id="fn-5">Decision log D4 and D19: the first cycles of a fault are covered in hardware by the IPM short-circuit protection. <a href="#fnref-5" aria-label="Back to text">↩</a></li>
+          <li id="fn-6">Decision log D1, <code>mission_results.txt</code>: IGBT junction 110.6 °C at heavy load, design limit 125 °C. <a href="#fnref-6" aria-label="Back to text">↩</a></li>
+          <li id="fn-7">Manual V13, Step 2; decision log D21: LC filter 2 mH / 20 µF, resonance about 800 Hz, 2 mH = 0.75 Ω at 60 Hz. <a href="#fnref-7" aria-label="Back to text">↩</a></li>
+          <li id="fn-8">Manual V10, Step 4; decision log D21: tie 0.05 Ω + 0.2 mH per phase, 0.075 Ω at 60 Hz. <a href="#fnref-8" aria-label="Back to text">↩</a></li>
+          <li id="fn-9">Manual V10 (corrections of 2026-11-11 and 2026-11-13); decision log D5 and D27. <a href="#fnref-9" aria-label="Back to text">↩</a></li>
+          <li id="fn-10">V13, D26. <code>compare_v13xvs_8p4.txt</code>, before the load step. <a href="#fnref-10" aria-label="Back to text">↩</a></li>
+          <li id="fn-11">Manual V5, validation: R = 8.4 Ω, L = 20 mH, <var>P</var> ≈ 500 W, <var>Q</var> ≈ 410 VAR. <a href="#fnref-11" aria-label="Back to text">↩</a></li>
+        </ol>
+      </section>
+
+      <nav class="pager"><a rel="prev" href="real-world.html">Grid-forming in the real world</a><a rel="next" href="inertia-droop.html">Virtual inertia and droop</a></nav>
+    </article>
+  </main>
+  <footer class="site-footer" data-site-footer></footer>
+
+  <script type="module">
+    // Illustrative model: one phase of sine-triangle PWM into the LC filter and a resistive load.
+    // Values from the design: 200 V half bus, 2 mH, 20 uF, 8.4 ohm, 71.5 V peak at 60 Hz.
+    const NS = 'http://www.w3.org/2000/svg';
+    const plot = document.getElementById('wf-plot');
+    const slider = document.getElementById('wf-fsw');
+    const out = document.getElementById('wf-fsw-out');
+    const showPulses = document.getElementById('wf-pulses');
+    const readout = document.getElementById('wf-readout');
+
+    const L = 2e-3, C = 20e-6, R = 8.4, VH = 200, M = 71.5 / 200, F0 = 60;
+    const FRES = 1 / (2 * Math.PI * Math.sqrt(L * C));
+    const X0 = 64, X1 = 704, YC = 146, YS = 130 / 230;
+    const yOf = (v) => YC - v * YS;
+
+    function el(name, attrs, text) {
+      const e = document.createElementNS(NS, name);
+      for (const k in attrs) e.setAttribute(k, attrs[k]);
+      if (text !== undefined) e.textContent = text;
+      return e;
+    }
+
+    function simulate(fsw) {
+      const dt = 1e-6, T = 1 / F0, cycles = 3;
+      const n1 = Math.round(cycles * T / dt), n0 = Math.round((cycles - 1) * T / dt);
+      const span = n1 - n0;
+      let iL = 0, vC = 0, prev = 0;
+      const wave = [], pulse = [];
+      let a = 0, b = 0;
+      const samples = [];
+      for (let n = 0; n < n1; n++) {
+        const t = n * dt;
+        const ref = M * Math.sin(2 * Math.PI * F0 * t);
+        const ph = (t * fsw) % 1;
+        const tri = ph < 0.5 ? 4 * ph - 1 : 3 - 4 * ph;
+        const vin = ref > tri ? VH : -VH;
+        iL += dt * (vin - vC) / L;            // semi-implicit Euler
+        vC += dt * (iL - vC / R) / C;
+        if (n >= n0) {
+          const k = n - n0, x = X0 + (X1 - X0) * k / span;
+          if (k === 0) pulse.push('M' + x.toFixed(1) + ' ' + yOf(vin).toFixed(1));
+          else if (vin !== prev) pulse.push('H' + x.toFixed(1) + 'V' + yOf(vin).toFixed(1));
+          if (k % 10 === 0) {
+            wave.push((k === 0 ? 'M' : 'L') + x.toFixed(1) + ' ' + yOf(vC).toFixed(1));
+            const w = 2 * Math.PI * k / span;
+            a += vC * Math.sin(w); b += vC * Math.cos(w);
+            samples.push([w, vC]);
+          }
+        }
+        prev = vin;
+      }
+      pulse.push('H' + X1);
+      a *= 2 / samples.length; b *= 2 / samples.length;
+      let ripple = 0;
+      for (const [w, v] of samples) ripple = Math.max(ripple, Math.abs(v - a * Math.sin(w) - b * Math.cos(w)));
+      return { wave: wave.join(''), pulse: pulse.join(''), amp: Math.hypot(a, b), ripple };
+    }
+
+    function draw() {
+      const fk = parseFloat(slider.value);
+      const res = simulate(fk * 1000);
+      const label = (Number.isInteger(fk) ? fk.toFixed(0) : fk.toFixed(1)) + ' kHz';
+      out.textContent = label;
+      slider.setAttribute('aria-valuetext', label);
+      plot.replaceChildren();
+      for (const v of [200, 0, -200]) {
+        plot.append(el('line', { class: 'grid', x1: X0, x2: X1, y1: yOf(v), y2: yOf(v) }));
+        plot.append(el('text', { x: X0 - 8, y: yOf(v) + 4, 'text-anchor': 'end' }, (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v) + ' V'));
+      }
+      for (const v of [71.5, -71.5]) plot.append(el('line', { class: 'target', x1: X0, x2: X1, y1: yOf(v), y2: yOf(v) }));
+      plot.append(el('text', { x: X1 - 4, y: yOf(71.5) - 6, 'text-anchor': 'end' }, '±71.5 V target'));
+      if (showPulses.checked) plot.append(el('path', { class: 'pulse', d: res.pulse }));
+      plot.append(el('path', { class: 'wave', d: res.wave }));
+      plot.append(el('text', { x: (X0 + X1) / 2, y: 306, 'text-anchor': 'middle' }, 'one 60 Hz cycle (16.7 ms)'));
+      plot.append(el('text', { class: 't-dc', x: X0 + 6, y: 300 }, 'switch output'));
+      plot.append(el('text', { class: 't-ac', x: X1 - 6, y: 300, 'text-anchor': 'end' }, 'capacitor voltage'));
+      const ratio = fk * 1000 / FRES;
+      readout.innerHTML = 'Switching at <b>' + label + '</b>, ' + ratio.toFixed(1) + ' times the filter resonance (' + FRES.toFixed(0) +
+        ' Hz). 60 Hz wave: <b>' + res.amp.toFixed(1) + ' V peak</b>. Ripple left on it: <b>±' + res.ripple.toFixed(1) + ' V</b>.';
+    }
+
+    slider.addEventListener('input', draw);
+    showPulses.addEventListener('change', draw);
+    draw();
+  </script>
+</body>
+</html>

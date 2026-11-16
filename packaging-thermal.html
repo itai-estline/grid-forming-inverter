@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Packaging and thermal · Grid-Forming Inverter</title>
+  <meta name="description" content="How I sized and packaged a roughly 1 kW grid-forming inverter: the power module, the loss and thermal model, the heatsink and fan, a hand calculation checked against Ansys FEA, and the layout inside the enclosure. Design only, nothing was built.">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/detail.css">
+  <style>
+    /* Page-local styles for the thermal-resistance ladder (gd). */
+    .gd-scroll { overflow-x: auto; }
+    .gd-scroll:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+    svg.gd { display: block; width: 100%; min-width: 600px; height: auto; }
+    svg.gd .bx { fill: var(--night-2); stroke: var(--night-4); stroke-width: 1.5; }
+    svg.gd .ln { fill: none; stroke: var(--ink-3); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+    svg.gd .ln.c-dc { stroke: var(--dc); }
+    svg.gd .ln.c-warn { stroke: var(--warn); }
+    svg.gd .res { fill: var(--night-1); stroke: var(--ink-2); stroke-width: 2; }
+    svg.gd .mk { stroke: none; fill: var(--dc); }
+    svg.gd text { font-family: var(--font-sans); font-size: 14px; fill: var(--ink); stroke: none; }
+    svg.gd text.sub { font-family: var(--font-mono); font-size: 12px; fill: var(--ink-2); }
+    svg.gd text.lbl { font-size: 12px; fill: var(--ink-3); }
+    svg.gd text.t-warn { fill: var(--warn); font-family: var(--font-mono); font-size: 13px; }
+    svg.gd text.t-dc { fill: var(--dc); font-family: var(--font-mono); font-size: 12px; }
+  </style>
+  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }</script>
+  <script type="module" src="js/detail/detail.js"></script>
+</head>
+<body class="detail" data-page="packaging-thermal">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header" data-site-header></header>
+  <main id="main">
+    <article class="page">
+      <header class="page-head">
+        <p class="eyebrow">Inside the design · Station 13</p>
+        <h1>Packaging and thermal</h1>
+        <p class="lede">A controller on a screen does not get hot. A real one does, so after the control work I sized a roughly 1 kW unit around it: a power module, a loss and thermal model, a heatsink and fan, and an enclosure. The CAD on this page is a packaging design. Nothing was built or tested.</p>
+        <p class="back-links"><a href="index.html#s13">Back to the journey, station 13</a></p>
+      </header>
+
+      <div class="results">
+        <div class="result"><span class="value">110.6 °C</span><span class="label">IGBT junction at heavy load</span><span class="src">D1</span></div>
+        <div class="result"><span class="value">119.2 °C</span><span class="label">IGBT junction at heavy load with the fan failed</span><span class="src">D1</span></div>
+        <div class="result"><span class="value">125 °C</span><span class="label">My design limit (module maximum is 150 °C)</span><span class="src">Manual V11</span></div>
+        <div class="result"><span class="value">0.47 K/W</span><span class="label">Heatsink to air under the module, from FEA (hand calculation: 0.39)</span><span class="src">D1, Manual V11</span></div>
+      </div>
+
+      <section id="hardware">
+        <h2>The hardware I picked</h2>
+        <p>For the switches I chose an Infineon CIPOS Mini IKCM20L60GD, an intelligent power module (IPM) rated 600 V and 20 A, 36 × 21 mm<sup class="fn"><a href="#fn-1" id="fnref-1">1</a></sup>. It holds the six IGBTs, six diodes and their gate drivers in one package. The datasheet allows a junction temperature of 150 °C. I set a stricter design limit of 125 °C, so there is margin for everything the model leaves out<sup class="fn"><a href="#fn-1">1</a></sup>.</p>
+        <p>I switch it at 10 kHz. The reason is heat: every switching event costs a little energy, and at 16 kHz my model put the IGBT junction at 162 °C under heavy load, above the module's limit<sup class="fn"><a href="#fn-1">1</a></sup>. The simulations in the rest of this site use an average-value converter and never show this switching loss, so it only shows up in this thermal model.</p>
+        <figure class="part-viewer" data-model="assets/models/inverter/unit.glb" data-nodes="ipm,thermal_pad"
+                data-poster="assets/renders/ipm.webp" data-tier="A"
+                data-callouts='[{"node":"ipm","text":"IKCM20L60GD: six IGBTs, six diodes and the gate drivers in one package"},{"node":"thermal_pad","text":"Thermal pad between the module and the heatsink"}]'>
+          <figcaption>The power module and its thermal pad. Drag to rotate.</figcaption>
+        </figure>
+      </section>
+
+      <section id="loss-model">
+        <h2>The loss model and the thermal path</h2>
+        <p>The thermal model is a Simscape network driven by a loss calculation<sup class="fn"><a href="#fn-2" id="fnref-2">2</a></sup>. The loss part uses datasheet values taken at 150 °C and applies them at every temperature, which is slightly pessimistic. Each IGBT loses power in two ways. Conduction loss is the voltage across it while it is on times the current through it. Switching loss is a fixed energy per switching event, scaled to the actual current and DC voltage, times the switching frequency:</p>
+        <p class="eq"><var>P</var><sub>sw</sub> = (<var>E</var><sub>on</sub> + <var>E</var><sub>off</sub>) · <var>f</var><sub>sw</sub> · (<var>I</var><sub>pk</sub>/π)/<var>I</var><sub>ref</sub> · <var>V</var><sub>dc</sub>/<var>V</var><sub>ref</sub></p>
+        <p>The datasheet energies are <var>E</var><sub>on</sub> = 0.61 mJ and <var>E</var><sub>off</sub> = 0.36 mJ, measured at 300 V and 15 A, so those are <var>V</var><sub>ref</sub> and <var>I</var><sub>ref</sub><sup class="fn"><a href="#fn-2">2</a></sup>. The diodes get the same treatment with their own recovery energy. At heavy load the model puts the total module loss at 77.3 W<sup class="fn"><a href="#fn-3" id="fnref-3">3</a></sup>.</p>
+        <p>That heat has to get out through a chain of thermal resistances, each in kelvin per watt. The temperature drop across one is the power through it times its resistance, just like Ohm's law with watts as the current<sup class="fn"><a href="#fn-2">2</a></sup>:</p>
+
+<p>As a check on the model, the heatsink node should sit at ambient plus power times Rha: 40 + 77.3 × 0.47 ≈ 76.3 °C. The run gave 76.2 °C<sup class="fn"><a href="#fn-3">3</a></sup>.</p>
+        <p>The model also derates: above 85 °C at the heatsink it cuts the current, reaching zero at 100 °C<sup class="fn"><a href="#fn-2">2</a></sup>. That is what stops the fan-failure case from running away.</p>
+      </section>
+
+      <section id="heatsink">
+        <h2>The heatsink and the fan</h2>
+        <p>My first heatsink, 120 × 100 × 40 mm with a 60 mm fan, came out at 0.68 K/W by hand calculation, which was too high<sup class="fn"><a href="#fn-4" id="fnref-4">4</a></sup>. The one I kept is 120 × 100 × 56 mm with 13 fins, each 1.5 mm thick, and weighs 0.51 kg in aluminium. The fan is an 80 mm unit moving about 26 CFM<sup class="fn"><a href="#fn-4">4</a></sup>. The air between the fins is laminar (Reynolds number about 2200, heat transfer coefficient about 22 W/m²K), and the fins are 0.89 efficient<sup class="fn"><a href="#fn-4">4</a></sup>. With those, the hand calculation gave 0.39 K/W<sup class="fn"><a href="#fn-4">4</a></sup>.</p>
+        <figure class="part-viewer" data-model="assets/models/inverter/unit.glb" data-nodes="heatsink,thermal_pad,ipm,fan_frame,fan_rotor"
+                data-poster="assets/renders/thermal_stack.webp" data-tier="A"
+                data-callouts='[{"node":"ipm","text":"Module: the heat source"},{"node":"thermal_pad","text":"Thermal pad, 0.25 mm"},{"node":"heatsink","text":"Heatsink, 120 × 100 × 56 mm, 13 fins"},{"node":"fan_frame","text":"80 mm fan pushes air between the fins"}]'>
+          <figcaption>The thermal stack: module, pad, heatsink and fan. Drag to rotate.</figcaption>
+        </figure>
+        <figure class="part-viewer" data-model="assets/models/inverter/unit.glb" data-nodes="fan_frame,fan_rotor"
+                data-poster="assets/renders/fan.webp" data-tier="A"
+                data-callouts='[{"node":"fan_frame","text":"80 mm frame"},{"node":"fan_rotor","text":"Hub and blades, about 26 CFM"}]'>
+          <figcaption>The fan. Without it the heatsink falls back on natural convection and the junction runs hotter.</figcaption>
+        </figure>
+      </section>
+
+      <section id="hand-vs-fea">
+        <h2>Hand calculation against FEA</h2>
+        <p>The hand calculation treats the heatsink base as one uniform temperature. That is not what happens. The module is only 36 × 21 mm and the base is 120 × 100 mm, so the heat enters through a small footprint and has to spread sideways before the fins can use it. The base is hottest right under the module and cooler toward the edges.</p>
+        <p>To see how much that matters I ran a steady-state thermal analysis in Ansys Mechanical. I applied 77.3 W as heat generation inside the module body, put convection at 22.1 W/m²K and 43.1 °C air on every heatsink face except the top, and meshed the model with 36,924 elements<sup class="fn"><a href="#fn-5" id="fnref-5">5</a></sup>. The heat load matched the Simscape loss exactly, which is how I knew the two models were talking about the same thing.</p>
+
+        <figure class="img"><img src="assets/img/fea_temperature_all.webp" alt="Ansys temperature plot of the heatsink with the module and thermal pad on top. The colour runs from blue at the fin tips to red directly under the module." loading="lazy" width="1600" height="1000"><figcaption>Ansys steady-state temperature, whole stack. The module is on top and the fins point down.<sup class="fn"><a href="#fn-5">5</a></sup></figcaption></figure>
+        <figure class="img"><img src="assets/img/fea_temperature_heatsink.webp" alt="Ansys temperature plot of the heatsink alone, hottest in a patch directly under where the module sits and cooler toward the edges and fin tips." loading="lazy" width="1600" height="1000"><figcaption>The heatsink alone. The hot patch under the module footprint is the reason for the gap between the two numbers.<sup class="fn"><a href="#fn-5">5</a></sup></figcaption></figure>
+
+        <p>The base reached 76.5 °C under the module and averaged 63.8 °C, so the hot spot is about 13 K above the average<sup class="fn"><a href="#fn-5">5</a></sup>. Converted to a resistance to the 40 °C air, the average base is 0.31 K/W and the part under the module is 0.47 K/W<sup class="fn"><a href="#fn-5">5</a></sup>. The module sits on the hot part, so 0.47 is the number that matters. It is about 0.16 K/W of spreading resistance that the hand calculation left out<sup class="fn"><a href="#fn-5">5</a></sup>, and about 20 % worse than 0.39.</p>
+
+        <figure class="chart" data-chart='{"type":"bar","unit":"K/W","categories":["Hand calculation","FEA, average base","FEA, under the module"],"series":[{"name":"Heatsink to air","tone":"dc","values":[0.39,0.31,0.47]}]}'>
+          <figcaption>Heatsink-to-air resistance three ways<sup class="fn"><a href="#fn-5">5</a></sup>. The hand number sits between the FEA average and the FEA value under the module.</figcaption>
+        </figure>
+
+        <aside class="note">
+          <p>Decision D1: I put 0.47 K/W into the thermal model<sup class="fn"><a href="#fn-6" id="fnref-6">6</a></sup>. It is the conservative choice, because the module sits on the hottest part of the base. FEA also says the temperature sensor for derating should sit on the base next to the module, because the base there is about 13 K hotter than the average<sup class="fn"><a href="#fn-5">5</a></sup>.</p>
+        </aside>
+      </section>
+
+      <section id="results">
+        <h2>Results over a mission profile</h2>
+        <p>With 0.47 K/W in place I reran a mission profile built from my two-inverter model (Inverter 2, the worst case)<sup class="fn"><a href="#fn-7" id="fnref-7">7</a></sup>. It runs 20 minutes at base load (3.65 A), 20 minutes at heavy load, a short fault, a return to base load, and then the fan switched off: first at base load, then at heavy load. At heavy load the inverter would be asked for 12.6 A, but the current limiter holds it to 11.1 A<sup class="fn"><a href="#fn-7">7</a></sup>.</p>
+        <figure class="chart" data-chart='{"type":"bar","unit":"°C","categories":["Base load","Heavy load","Fault","Heavy load, fan failed"],"series":[{"name":"Peak IGBT junction","tone":"warn","values":[58.7,110.6,109.0,119.2]}],"target":{"value":125,"label":"design limit 125 °C"}}'>
+          <figcaption>Peak IGBT junction temperature in each phase of the mission<sup class="fn"><a href="#fn-3">3</a></sup>.</figcaption>
+        </figure>
+        <p>Every phase stays under 125 °C. Heavy load leaves 14 K of margin<sup class="fn"><a href="#fn-3">3</a></sup>. With the fan failed, the junction peaks at 119.2 °C, and that is only because the derating pulls the current down to 5.56 A<sup class="fn"><a href="#fn-3">3</a></sup>. The module is protected by the derating, not by luck. The filter inductor peaks at about 96 °C<sup class="fn"><a href="#fn-3">3</a></sup>.</p>
+        <figure class="img"><img src="assets/img/mission_thermal.webp" alt="Two stacked plots over the mission. The upper plot shows IGBT junction, diode junction, module case, heatsink and filter inductor temperatures against time, with a dashed line at the 125 degree design limit. The lower plot shows the delivered phase current after thermal derating." loading="lazy" width="1427" height="985"><figcaption>The Simscape output for the mission: temperatures on top, delivered current after derating below.<sup class="fn"><a href="#fn-3">3</a></sup></figcaption></figure>
+        <p>One limit on all of this: the model is a lumped network with datasheet values and a 40 °C cabinet temperature that I assumed. It is a design check, not a measurement.</p>
+      </section>
+
+      <section id="layout">
+        <h2>Inside the enclosure</h2>
+        <p>Everything fits in a 300 × 200 × 130 mm aluminium enclosure<sup class="fn"><a href="#fn-8" id="fnref-8">8</a></sup>. I modelled it in Fusion as <code>GFI_Inverter_Package_v1</code>, and the assembly has no interferences<sup class="fn"><a href="#fn-8">8</a></sup>. The layout is built around the airflow. From the bottom:</p>
+        <ol>
+          <li>The fan sits on the floor at one end and blows along the heatsink fins.</li>
+          <li>The heatsink sits above it with its base plate on top. The module sits on the base plate with the thermal pad between them.</li>
+          <li>Above the module my Fusion assembly has a 240 × 180 mm board. On it are the two DC-link capacitors, the three toroidal inductors, the three film capacitors and a terminal block. The board and the terminal block are placeholders for position and size: I did not design a PCB layout or pick a terminal.</li>
+          <li>The control board sits above the power PCB.</li>
+        </ol>
+        <p>In this layout the hot parts are at the bottom, in the airflow, and the control board is the part furthest from them.</p>
+        <figure class="part-viewer" data-model="assets/models/inverter/unit.glb"
+                data-poster="assets/renders/unit_open.webp" data-tier="A" data-ghost="enclosure_base"
+                data-callouts='[{"node":"fan_frame","text":"Fan"},{"node":"heatsink","text":"Heatsink with the module on top"},{"node":"power_pcb","text":"Power board (placeholder, no layout designed)"},{"node":"dclink_cap_1","text":"DC-link capacitor (one of two)"},{"node":"inductor_a","text":"Filter inductor (one of three)"},{"node":"filter_cap_a","text":"Filter capacitor (one of three)"},{"node":"control_board","text":"Control board"}]'>
+          <figcaption>The whole unit with the lid off. A packaging design from my Fusion assembly. Parts are modelled for shape and position, and nothing was built. Drag to rotate.</figcaption>
+        </figure>
+        <figure class="part-viewer" data-model="assets/models/inverter/unit.glb" data-nodes="enclosure_base,enclosure_lid,screws"
+                data-poster="assets/renders/unit_closed.webp" data-tier="A"
+                data-callouts='[{"node":"enclosure_base","text":"Base and walls, 300 × 200 × 130 mm aluminium"},{"node":"enclosure_lid","text":"Lid"}]'>
+          <figcaption>The enclosure, closed.</figcaption>
+        </figure>
+        <aside class="note warn">
+          <p>To be plain about it: this is a CAD design and a simulation. I did not build the unit, run the fan, or measure a temperature. The FEA and the thermal model are the evidence, and they are only as good as their inputs.</p>
+        </aside>
+      </section>
+
+      <section id="passives">
+        <h2>The passive parts</h2>
+        <p>The inductors and capacitors were sized in the control work and specified only by value. For the CAD I used the shape of a typical part of each kind, so the sizes below are the design values and the rest is representative.</p>
+        <p>The filter inductors are 2 mH toroids with a 58 mm outside diameter, about 0.15 kg and about 0.05 Ω each<sup class="fn"><a href="#fn-9" id="fnref-9">9</a></sup>. The filter capacitors are 20 µF film, one per phase<sup class="fn"><a href="#fn-1">1</a></sup>. The two DC-link capacitors are 220 µF, 450 V each<sup class="fn"><a href="#fn-1">1</a></sup>. The inductor's resistance matters thermally too: it is part of the loss model, and the model keeps the inductor peak near 96 °C<sup class="fn"><a href="#fn-3">3</a></sup>.</p>
+        <figure class="part-viewer" data-model="assets/models/inverter/unit.glb" data-nodes="inductor_a,inductor_b,inductor_c"
+                data-poster="assets/renders/inductor.webp" data-tier="B"
+                data-callouts='[{"node":"inductor_a","text":"2 mH toroid, 58 mm outside diameter"}]'>
+          <figcaption>The three filter inductors. Representative part, shape only. Drag to rotate.</figcaption>
+        </figure>
+        <figure class="part-viewer" data-model="assets/models/inverter/unit.glb" data-nodes="filter_cap_a,filter_cap_b,filter_cap_c"
+                data-poster="assets/renders/filter_cap.webp" data-tier="B"
+                data-callouts='[{"node":"filter_cap_a","text":"20 µF film capacitor, one per phase"}]'>
+          <figcaption>The three filter capacitors. Representative part, shape only.</figcaption>
+        </figure>
+        <figure class="part-viewer" data-model="assets/models/inverter/unit.glb" data-nodes="dclink_cap_1,dclink_cap_2"
+                data-poster="assets/renders/dclink_cap.webp" data-tier="B"
+                data-callouts='[{"node":"dclink_cap_1","text":"220 µF, 450 V DC-link capacitor"}]'>
+          <figcaption>The two DC-link capacitors. Representative part, shape only.</figcaption>
+        </figure>
+        <p>What is not designed here: the control board, the current and voltage sensors, the terminals and wiring. They exist in any real inverter, and I drew them as typical parts so the layout is complete. The controller algorithms are fully specified in the models. The hardware that would run them is not.</p>
+      </section>
+
+      <section class="footnotes" aria-label="Sources for this page"><h2>Sources for this page</h2>
+        <ol>
+          <li id="fn-1">Manual V11, Step 1 (hardware selection): Infineon CIPOS Mini IKCM20L60GD, 600 V / 20 A, 36 × 21 mm; <var>T</var><sub>j</sub> max 150 °C, design limit 125 °C (<code>gfi_pkg_params.m</code>); 10 kHz, and 162 °C at 16 kHz under heavy load; DC link 2 × 220 µF 450 V; filter 3 × 2 mH toroids (OD 58 mm) and 3 × 20 µF film. <a href="#fnref-1" aria-label="Back to text">↩</a></li>
+          <li id="fn-2">Manual V11, Step 2, and <code>gfi_pkg_params.m</code> / <code>gfi_build_thermal.m</code>: datasheet values at 150 °C (<var>E</var><sub>on</sub> 0.61 mJ, <var>E</var><sub>off</sub> 0.36 mJ at 300 V and 15 A; <var>R</var><sub>jc</sub> 1.85 K/W IGBT and 2.85 K/W diode); pad 0.22 K/W; natural convection 1.60 K/W; derating from 85 °C to zero at 100 °C. <a href="#fnref-2" aria-label="Back to text">↩</a></li>
+          <li id="fn-3">D1 and <code>mission_results.txt</code> (run of 2026-11-13, <var>R</var><sub>ha</sub> = 0.47): base 58.7 °C, heavy load 110.6 °C (diode 103.1, case 93.2, heatsink 76.2), fault 109.0 °C, fan failure plus heavy load 119.2 °C (derated to 5.56 A), inductor peak 96.0 °C, module loss 77.28 W. <a href="#fnref-3" aria-label="Back to text">↩</a></li>
+          <li id="fn-4">Manual V11, Step 3 (hand calculation): original 120 × 100 × 40 mm with a 60 mm fan 0.68 K/W; chosen 120 × 100 × 56 mm, 13 fins × 1.5 mm, 80 mm fan (about 26 CFM), 0.39 K/W, 0.51 kg; Re about 2200, <var>h</var> about 22 W/m²K, fin efficiency 0.89. <a href="#fnref-4" aria-label="Back to text">↩</a></li>
+          <li id="fn-5">Manual V11, Step 5 (Ansys Mechanical, update of 2026-11-12): <var>h</var> = 22.1 W/m²K at 43.1 °C, 77.3 W in the module, 36,924 elements; heatsink 60.1 / 63.8 / 76.5 °C (min / average / max); <var>R</var><sub>ha</sub> 0.31 K/W average base and 0.47 K/W under the module; about 0.16 K/W spreading resistance. <a href="#fnref-5" aria-label="Back to text">↩</a></li>
+          <li id="fn-6">Decision log D1: use the FEA heatsink resistance (0.47 K/W) in the thermal model. <a href="#fnref-6" aria-label="Back to text">↩</a></li>
+          <li id="fn-7">Manual V11, Step 2, and the profile in <code>gfi_pkg_params.m</code>, taken from the V10_fixed Inverter 2 operating points: 3.65 A base load, 12.6 A demanded at heavy load, limited to 11.1 A. <a href="#fnref-7" aria-label="Back to text">↩</a></li>
+          <li id="fn-8">Manual V11, Step 4: Fusion assembly <code>GFI_Inverter_Package_v1</code>, 300 × 200 × 130 mm aluminium enclosure, no interferences. <a href="#fnref-8" aria-label="Back to text">↩</a></li>
+          <li id="fn-9">Brief section 8 (component sheet), and <code>gfi_pkg_params.m</code>: 2 mH toroid, OD 58 mm, 0.15 kg, 0.05 Ω. <a href="#fnref-9" aria-label="Back to text">↩</a></li>
+        </ol>
+      </section>
+
+      <nav class="pager"><a rel="prev" href="parallel.html">Two inverters in parallel, and virtual impedance</a><a rel="next" href="dq-frame.html">Side chapter: the dq frame (V8)</a></nav>
+    </article>
+  </main>
+  <footer class="site-footer" data-site-footer></footer>
+</body>
+</html>

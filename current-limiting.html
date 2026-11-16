@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Current limiting and fault ride-through · Grid-Forming Inverter</title>
+  <meta name="description" content="How my inverter design holds its output current at 10 A during a bolted fault, using a virtual resistance with proportional and integral action, and where the result is only partly met.">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/detail.css">
+  <style>
+    /* Page-local styles for the hand-drawn sketch (gd) on this page. */
+    .gd-scroll { overflow-x: auto; }
+    .gd-scroll:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+    svg.gd { display: block; width: 100%; min-width: 560px; height: auto; }
+    svg.gd .ln { fill: none; stroke: var(--ink-3); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+    svg.gd .ln.c-ac { stroke: var(--ac); }
+    svg.gd .ln.c-warn { stroke: var(--warn); }
+    svg.gd .ln.c-muted { stroke: var(--ink-3); stroke-width: 1.25; }
+    svg.gd .axis { fill: none; stroke: var(--night-4); stroke-width: 1.5; }
+    svg.gd .grid { fill: none; stroke: var(--night-3); stroke-width: 1; }
+    svg.gd .dash { stroke-dasharray: 5 6; }
+    svg.gd .band { fill: var(--warn); opacity: 0.1; stroke: none; }
+    svg.gd text { font-family: var(--font-sans); font-size: 14px; fill: var(--ink); stroke: none; }
+    svg.gd text.sub { font-family: var(--font-mono); font-size: 12px; fill: var(--ink-2); }
+    svg.gd text.lbl { font-size: 12px; fill: var(--ink-3); }
+    svg.gd text.c-ac { fill: var(--ac); }
+    svg.gd text.c-warn { fill: var(--warn); }
+  </style>
+  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }</script>
+  <script type="module" src="js/detail/detail.js"></script>
+</head>
+<body class="detail" data-page="current-limiting">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header" data-site-header></header>
+  <main id="main">
+    <article class="page">
+      <header class="page-head">
+        <p class="eyebrow">Inside the design · Station 12</p>
+        <h1>Current limiting and fault ride-through</h1>
+        <p class="lede">A grid-forming inverter holds its voltage, so when something shorts the output, the short decides the current, not the inverter. This page is about how my design keeps that current at 10 A. It works, with one criterion only partly met, and I say which one below.</p>
+        <p class="back-links"><a href="index.html#s12">Back to the journey, station 12</a></p>
+      </header>
+
+      <div class="results">
+        <div class="result"><span class="value">9.999 / 10.001 A</span><span class="label">Fault current, inverter 1 / 2, last 0.1 s (limit 10 A)</span><span class="src">V13, D27</span></div>
+        <div class="result"><span class="value">59 / 82 ms</span><span class="label">Time to get back within +10 % (11 A), inverter 2 / 1</span><span class="src">V13, D27</span></div>
+        <div class="result"><span class="value">97 / 141 ms</span><span class="label">Time to get back within +5 % (10.5 A), inverter 2 / 1. Target was 100 ms: partly met</span><span class="src">V13, D27</span></div>
+        <div class="result"><span class="value">13.43 / 13.29 A</span><span class="label">Peak of the one-cycle average current in the first cycles of the fault</span><span class="src">V13, D27</span></div>
+      </div>
+
+      <section id="why">
+        <h2>Why a voltage source needs a limit</h2>
+        <p>An inverter that follows the grid controls its own current, so it limits itself almost by construction. A grid-forming inverter does the opposite: it controls voltage. If a fault drops the load to a fraction of an ohm, the voltage loop keeps pushing and the current is whatever that small impedance allows. The power switches cannot carry that. The module I picked is a 600 V / 20 A part<sup class="fn"><a href="#fn-1" id="fnref-1">1</a></sup>.</p>
+        <p>So the controller has to give up some voltage on purpose when the current gets too high. My test case is a bolted fault on the shared bus: a three-phase 0.5 Ω resistance with 1 mH in series, switched in while the inverters are running<sup class="fn"><a href="#fn-2" id="fnref-2">2</a></sup>.</p>
+      </section>
+
+      <section id="sensing">
+        <h2>How the current is measured</h2>
+        <p>The limiter does not look at all three phases. It takes the phase A current, rectifies it (takes the absolute value) and averages it over one 60 Hz cycle. The result is called <var>I</var><sub>avg</sub>, and the limit is 10 A on that number<sup class="fn"><a href="#fn-3" id="fnref-3">3</a></sup>. It is a rectified average, so it is neither the peak nor the RMS current, and the real peaks in a fault are higher. In hardware the phase currents would come from three current sensors, which I did not specify.</p>
+        <figure class="part-viewer" data-model="assets/models/inverter/unit.glb" data-nodes="sensor_current_a,sensor_current_b,sensor_current_c"
+                data-poster="assets/renders/sensors.webp" data-tier="C"
+                data-callouts='[{"node":"sensor_current_a","text":"The limiter reads phase A: rectified, then averaged over one cycle"}]'>
+          <figcaption>Phase current sensors. Typical part, not specified in this design. Drag to rotate.</figcaption>
+        </figure>
+        <p>The one-cycle average is cheap and smooth, but it is slow: it cannot know about a fault until a cycle's worth of data has changed. Every number about timing on this page comes back to that.</p>
+      </section>
+
+      <section id="single">
+        <h2>One inverter: the closed-loop limiter</h2>
+        <p>My first limiter, from the early models, scaled the voltage by <var>I</var><sub>lim</sub>/<var>I</var>. That does not work, because the current is roughly proportional to the scale, so the loop settles where <var>I</var> is about √(<var>I</var><sub>unlimited</sub>·<var>I</var><sub>lim</sub>), not at the limit. In the test with a 6 A limit it settled at 18.3 A, three times too high<sup class="fn"><a href="#fn-4" id="fnref-4">4</a></sup>.</p>
+        <p>The fix (V6_cl) is a proper closed loop: the error <var>I</var><sub>lim</sub> − <var>I</var><sub>avg</sub> goes through a gain <var>K</var><sub>i,lim</sub> into an integrator whose output scales the voltage, limited to 0.05…1. An integrator keeps working until the error is zero, so the current ends up on the limit<sup class="fn"><a href="#fn-4">4</a></sup>.</p>
+
+        <div class="table-wrap"><table class="data">
+          <caption>V6_cl limiter gain sweep, single inverter, 6 A limit<sup class="fn"><a href="#fn-4">4</a></sup></caption>
+          <thead><tr><th scope="col">Ki</th><th scope="col">First 20 to 50 ms of the fault</th><th scope="col">Settled current</th><th scope="col">Ripple (std)</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">1</th><td>18.9 A</td><td>6.01 A</td><td>0.04</td></tr>
+            <tr><th scope="row"><b>2</b></th><td>10.6 A</td><td>6.02 A</td><td>0.09</td></tr>
+            <tr><th scope="row">3</th><td>11.8 A</td><td>6.05 A</td><td>0.55 (rings)</td></tr>
+            <tr><th scope="row">10</th><td>12.7 A</td><td>8.61 A</td><td>3.88 (unstable)</td></tr>
+          </tbody>
+        </table></div>
+
+        <p>I chose Ki = 2. It came back to within ±10 % of the limit 86 ms after the fault and held 6.0 A. In normal operation the scale stays at 1.0 and nothing changes<sup class="fn"><a href="#fn-4">4</a></sup>.</p>
+        <figure class="img"><img src="assets/img/v6_cl_fault_current.webp" alt="Plot of the single-inverter fault current. After the fault the current spikes, then is pulled down and held flat at the 6 A limit." loading="lazy" width="1015" height="629"><figcaption>The V6_cl result: current spikes at the fault, then is held at the limit. This is the MATLAB plot from the model run<sup class="fn"><a href="#fn-4">4</a></sup>.</figcaption></figure>
+        <p>The honest limit of this design is already visible: the first 50 ms or so are still above the limit.</p>
+      </section>
+
+      <section id="virtual-resistance">
+        <h2>Two inverters: a virtual resistance</h2>
+        <p>With two inverters on one bus the integrating limiter above caused trouble: each one cut its own voltage and the other picked up the current, and the two limiters chased each other in a limit cycle (the story is on the <a href="what-went-wrong.html">what went wrong page</a>). The parallel design uses a different idea. When the current is over the limit, the inverter subtracts a voltage proportional to its own current from its reference. Subtracting <var>R</var><sub>v</sub>·<var>i</var> is the same as putting a resistor <var>R</var><sub>v</sub> in series with the output, so the harder the load pulls, the more the inverter's voltage sags, and it is a resistor, not a switch, so there is nothing to chatter.</p>
+        <p>The size of <var>R</var><sub>v</sub> is set by the current error <var>e</var> = <var>I</var><sub>avg</sub> − 10 A:</p>
+        <p class="eq"><var>R</var><sub>v</sub> = <var>K</var><sub>v</sub>·<var>e</var> + <var>K</var><sub>iv</sub>·∫<var>e</var> d<var>t</var>,&nbsp;&nbsp; clamped to 0 … 20 Ω</p>
+        <p>The gains are <var>K</var><sub>v</sub> = 2 Ω/A and <var>K</var><sub>iv</sub> = 40 Ω/(A·s). In normal operation <var>e</var> is negative, the integrator sits at its lower clamp and <var>R</var><sub>v</sub> = 0, so the limiter has no effect at all until the current goes over 10 A<sup class="fn"><a href="#fn-5" id="fnref-5">5</a></sup>. The drop is subtracted from the voltage reference, not from the modulation, so the <a href="voltage-loop.html">voltage loop</a> tracks it instead of fighting it. There is a one-sample (10 µs) delay in the path; without it the model had an algebraic loop and a 3 s run had not finished after 35 minutes.</p>
+
+</section>
+
+      <section id="how-it-got-there">
+        <h2>How it got there</h2>
+        <p><strong>Proportional only (V12) left an error.</strong> With only the <var>K</var><sub>v</sub> term the inverter settles where the sag is just enough to hold the current, and that point is above the limit: <var>I</var> = <var>I</var><sub>lim</sub> + <var>R</var><sub>v</sub>/<var>K</var><sub>v</sub> = 10 + 2.9/2 ≈ 11.4 A. In the test the current settled at 11.44 and 11.39 A, above the 10.5 A pass line. Raising the cap on <var>R</var><sub>v</sub> would not help, because the cap was never reached<sup class="fn"><a href="#fn-7" id="fnref-7">7</a></sup>.</p>
+        <p><strong>A bigger gain oscillated.</strong> With <var>K</var><sub>v</sub> = 10 the average current came closer (10.73 and 10.57 A) but the virtual resistance swung up to 17.2 Ω and the phase current peaked at 69 and 65 A in the last 0.2 s, with the two frequencies drifting apart. The loop was too fast for a measurement that takes a full cycle to update<sup class="fn"><a href="#fn-8" id="fnref-8">8</a></sup>.</p>
+        <p><strong>Adding integral action fixed it.</strong> I went back to <var>K</var><sub>v</sub> = 2 and added the integral term. The current settled on 10.000 A in both inverters with no oscillation and no DC in the phase current<sup class="fn"><a href="#fn-9" id="fnref-9">9</a></sup>. Doubling the integral gain to 80 would have saved about 20 ms but adds ripple and reduces margin, so I kept 40<sup class="fn"><a href="#fn-10" id="fnref-10">10</a></sup>.</p>
+        <p><strong>Then the virtual reactance arrived.</strong> The final design also carries a permanent virtual reactance (explained on the <a href="parallel.html">parallel operation page</a>). A first version of it included a 10 ms low-pass on <var>R</var><sub>v</sub>, which put lag inside the current loop and caused a growing oscillation of about 35 Hz in the fault test. I removed the low-pass, and the fault was then held cleanly, and the transient was softer than without the reactance<sup class="fn"><a href="#fn-11" id="fnref-11">11</a></sup>.</p>
+      </section>
+
+      <section id="results">
+        <h2>The final fault test</h2>
+        <p>The last run used the finished V13 model: fault at 0.5 s, 1.0 s run, both inverters. Both were held on the limit and settled without oscillation<sup class="fn"><a href="#fn-6">6</a></sup>.</p>
+
+        <div class="table-wrap"><table class="data">
+          <caption>Bolted fault, 0.5 Ω + 1 mH on the shared bus, inverter 1 / inverter 2<sup class="fn"><a href="#fn-6">6</a></sup><sup class="fn"><a href="#fn-7">7</a></sup><sup class="fn"><a href="#fn-9">9</a></sup></caption>
+          <thead><tr><th scope="col">Design</th><th scope="col">Settled I<sub>avg</sub></th><th scope="col">Peak I<sub>avg</sub></th><th scope="col">Back within +10 %</th><th scope="col">Back within +5 %</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">V12, proportional only</th><td>11.44 / 11.39 A</td><td>14.4 / 14.0 A</td><td></td><td>not within 500 ms</td></tr>
+            <tr><th scope="row">V13, proportional + integral</th><td>10.000 / 10.000 A</td><td>14.1 / 13.8 A</td><td>81 / 79 ms</td><td>138 / 118 ms</td></tr>
+            <tr><th scope="row"><b>V13 final, with scaled virtual reactance</b></th><td><b>9.999 / 10.001 A</b></td><td>13.43 / 13.29 A</td><td>82 / 59 ms</td><td>141 / 97 ms</td></tr>
+          </tbody>
+        </table></div>
+
+        <figure class="chart" data-chart='{"type":"bar","unit":"A","xLabel":"Settled average current in the fault (limit 10 A)","categories":["Inverter 1","Inverter 2"],"series":[{"name":"V12","tone":"warn","values":[11.44,11.39]},{"name":"V13 final","tone":"ac","values":[9.999,10.001]}],"target":{"value":10.5,"label":"pass line 10.5 A"}}'>
+          <figcaption>Settled current in the last 0.1 s of the fault, V12 against V13<sup class="fn"><a href="#fn-6">6</a></sup><sup class="fn"><a href="#fn-7">7</a></sup>. The limit is 10 A and I counted anything up to 10.5 A as a pass. V12 missed; V13 sits on the limit.</figcaption>
+        </figure>
+
+        <aside class="note warn"><strong>What is only partly met.</strong> My pass criterion was "back within +5 % (10.5 A) in 100 ms". Inverter 2 got there in 97 ms. Inverter 1 took 141 ms. So the criterion is met for one inverter and missed for the other. Getting within +10 % takes about 60 to 80 ms. The cause is the one-cycle measurement more than the gains: raising the integral gain only bought about 20 ms. The peaks of 13.4 and 13.3 A in the average are also set by that measurement<sup class="fn"><a href="#fn-6">6</a></sup><sup class="fn"><a href="#fn-10">10</a></sup>.</aside>
+
+        <p>There is a second cost in the final design that I want to state plainly. The peak phase currents in the first cycles of the fault were 41 A and 43 A, because inverter 2 now has half the virtual reactance of inverter 1. With equal reactance they were 29 and 30 A, and with none, 47 and 46 A<sup class="fn"><a href="#fn-6">6</a></sup>. These instantaneous peaks are above the module's 20 A rating. A model with an average-value converter does not show what that would do to the switches. In hardware the first cycles would be covered by the short-circuit protection built into the power module, not by my controller. I have not designed or tested that, so I do not count it as a result.</p>
+        <p>One side note: during the fault the two inverters supplied 315 and 227 VAR of reactive power, because the fault branch includes 1 mH<sup class="fn"><a href="#fn-6">6</a></sup>.</p>
+      </section>
+
+      <section class="footnotes" aria-label="Sources for this page"><h2>Sources for this page</h2>
+        <ol>
+          <li id="fn-1">Scrollytelling brief, section 2: Infineon IKCM20L60GD, 600 V / 20 A, switched at 10 kHz; manual V11. <a href="#fnref-1" aria-label="Back to text">↩</a></li>
+          <li id="fn-2">V13, D27 (bolted fault: 0.5 Ω + 1 mH on the shared bus); brief, section 2. <a href="#fnref-2" aria-label="Back to text">↩</a></li>
+          <li id="fn-3">Brief, section 2, item 9: phase-A current, rectified, one-cycle average, 10 A limit; D5 (rectified average against RMS). <a href="#fnref-3" aria-label="Back to text">↩</a></li>
+          <li id="fn-4">Decision log D4, <code>v6_cl_sweep.txt</code>: V6 scale = I_lim/I settled at 18.3 A against a 6 A limit; V6_cl with Ki = 2 held 6.02 A, within ±10 % at 86 ms. <a href="#fnref-4" aria-label="Back to text">↩</a></li>
+          <li id="fn-5">V13, D9 and D16: Rv = Kv·e + Kiv·∫e, Kv = 2 Ω/A, Kiv = 40 Ω/(A·s), clamp 0 to 20 Ω; D13 (drop subtracted from the voltage reference). <a href="#fnref-5" aria-label="Back to text">↩</a></li>
+          <li id="fn-6">V13, D27. Decision log, <code>compare_v13final_fault.txt</code>: fault 0.5 s, 1.0 s run; peak phase currents 41 / 43 A; equal-Xv and no-Xv comparison from D25 and D17.</li>
+          <li id="fn-7">V12, D15. <code>compare_v12_fault.txt</code>: settled 11.44 / 11.39 A, peak I_avg 14.4 / 14.0 A, Rv settled at 2.9 / 2.8 Ω, still above 10.5 A at the end of the run (500 ms). <a href="#fnref-7" aria-label="Back to text">↩</a></li>
+          <li id="fn-8">V13, D16. <code>compare_v13k2_kv10_fault.txt</code>: Kv = 10, I_avg 10.73 / 10.57 A, Rv up to 17.2 / 16.5 Ω, ia peaks 69 / 65 A. <a href="#fnref-8" aria-label="Back to text">↩</a></li>
+          <li id="fn-9">V13, D17. <code>compare_v13pi_fault.txt</code>: I_avg 10.000 / 10.000 A, peak 14.1 / 13.8 A, within +10 % at 81 / 79 ms, within +5 % at 138 / 118 ms. <a href="#fnref-9" aria-label="Back to text">↩</a></li>
+          <li id="fn-10">V13, D19. <code>compare_v13pi80_fault.txt</code>: Kiv = 80 gave +5 % at 119 / 99 ms; Kiv = 40 kept. D19 and D27 for the "partly met" wording and the IPM short-circuit protection note. <a href="#fnref-10" aria-label="Back to text">↩</a></li>
+          <li id="fn-11">V13, D24 and D25: the Rv low-pass caused a growing ~35 Hz oscillation; removing it gave 10.001 / 10.002 A with peak I_avg 13.1 / 12.9 A (13.43 / 13.29 A in the final model with scaled Xv). <a href="#fnref-11" aria-label="Back to text">↩</a></li>
+        </ol>
+      </section>
+
+      <nav class="pager"><a rel="prev" href="voltage-loop.html">The voltage loop</a><a rel="next" href="parallel.html">Two inverters in parallel, and virtual impedance</a></nav>
+    </article>
+  </main>
+  <footer class="site-footer" data-site-footer></footer>
+</body>
+</html>

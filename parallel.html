@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Two inverters in parallel, and virtual impedance · Grid-Forming Inverter</title>
+  <meta name="description" content="Two identical grid-forming inverters on one bus share a load step exactly 2 to 1 with no communication, and a scaled virtual reactance cut the circulating reactive power from 308 VAR to 11 VAR.">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/detail.css">
+  <style>
+    /* Page-local styles for the hand-drawn diagram (gd) and the small widget (gw) on this page. */
+    .gd-scroll { overflow-x: auto; }
+    .gd-scroll:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+    svg.gd { display: block; width: 100%; min-width: 640px; height: auto; }
+    svg.gd .box { fill: var(--night-2); stroke: var(--night-4); stroke-width: 1.5; }
+    svg.gd .box.inv1 { stroke: var(--inv1); stroke-width: 2.5; }
+    svg.gd .box.inv2 { stroke: var(--inv2); stroke-width: 2.5; }
+    svg.gd .box.virt { stroke: var(--ctl); stroke-dasharray: 6 5; }
+    svg.gd .ln { fill: none; stroke: var(--ink-3); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    svg.gd .ln.c-ac { stroke: var(--ac); stroke-width: 7; }
+    svg.gd .arrowhead { fill: var(--ink-3); }
+    svg.gd text { font-family: var(--font-sans); font-size: 14px; fill: var(--ink); stroke: none; }
+    svg.gd text.sub { font-family: var(--font-mono); font-size: 12px; fill: var(--ink-2); }
+    svg.gd text.lbl { font-size: 12px; fill: var(--ink-3); }
+    svg.gd text.c-inv1 { fill: var(--inv1); }
+    svg.gd text.c-inv2 { fill: var(--inv2); }
+    svg.gd text.c-ctl { fill: var(--ctl); }
+    svg.gd text.c-ac { fill: var(--ac); }
+
+    .gw { display: grid; gap: var(--s-4); }
+    .gw-controls { display: flex; flex-wrap: wrap; gap: var(--s-4) var(--s-5); align-items: flex-end; }
+    .gw-field { display: grid; gap: 6px; flex: 1 1 280px; font: 500 14px/1.3 var(--font-sans); color: var(--ink-2); }
+    .gw-field output { font-family: var(--font-mono); color: var(--ink); }
+    .gw input[type="range"] { width: 100%; accent-color: var(--ac); min-height: 28px; }
+    .gw input:focus-visible { outline: 2px solid var(--ac); outline-offset: 3px; }
+    .pb { display: grid; gap: 14px; }
+    .pb-row { display: grid; grid-template-columns: 96px 1fr 84px; gap: 12px; align-items: center; font: 500 14px/1.2 var(--font-sans); color: var(--ink-2); }
+    .pb-row .pb-name.inv1 { color: var(--inv1); }
+    .pb-row .pb-name.inv2 { color: var(--inv2); }
+    .pb-track { position: relative; height: 22px; background: var(--night-0); border: 1px solid var(--night-3); border-radius: 4px; overflow: hidden; }
+    .pb-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; }
+    .pb-fill.inv1 { background: var(--inv1); }
+    .pb-fill.inv2 { background: var(--inv2); }
+    .pb-tick { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ink); opacity: 0.7; }
+    .pb-val { font-family: var(--font-mono); color: var(--ink); text-align: right; }
+    @media (prefers-reduced-motion: no-preference) { .pb-fill { transition: width 120ms ease-out; } }
+    .gw-readout { margin: 0; font: 13px/1.6 var(--font-mono); color: var(--ink-2); }
+    .gw-readout b { color: var(--ink); font-weight: 500; }
+    .pb-legend { margin: 0; font: 12px/1.4 var(--font-sans); color: var(--ink-3); }
+  </style>
+  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }</script>
+  <script type="module" src="js/detail/detail.js"></script>
+</head>
+<body class="detail" data-page="parallel">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header" data-site-header></header>
+  <main id="main">
+    <article class="page">
+      <header class="page-head">
+        <p class="eyebrow">Many inverters, one grid · Station 14</p>
+        <h1>Two inverters in parallel, and virtual impedance</h1>
+        <p class="lede">A grid is many sources on one set of wires, and none of them can ask the others what to do. I put two copies of my inverter on one bus in simulation. They split a load change exactly 2 to 1 with no communication. Making them also stay out of each other's way in reactive power took a piece I had not planned: a virtual reactance.</p>
+        <p class="back-links"><a href="index.html#s14">Back to the journey, station 14</a></p>
+      </header>
+
+      <div class="results">
+        <div class="result"><span class="value">2.000</span><span class="label">ΔP₂ / ΔP₁ after the load step</span><span class="src">V13, D26</span></div>
+        <div class="result"><span class="value">59.857 → 59.554 Hz</span><span class="label">Shared frequency before and after the step</span><span class="src">V13, D26</span></div>
+        <div class="result"><span class="value">308 → 11 VAR</span><span class="label">Circulating reactive power under overload, before and after the scaled virtual reactance</span><span class="src">V13, D21, D26</span></div>
+        <div class="result"><span class="value">9.74 A</span><span class="label">Inverter 2 current in the +4.2 Ω overload (limit 10 A)</span><span class="src">V13, D26</span></div>
+      </div>
+
+      <section id="setup">
+        <h2>The setup</h2>
+        <p>Two identical inverters, each with its own 400 V DC source, converter and 2 mH / 20 µF filter, connect to one shared bus through a tie of 0.05 Ω in series with 0.2 mH per phase. The load hangs on that bus: 8.4 Ω per phase at the start of the sharing test<sup class="fn"><a href="#fn-1" id="fnref-1">1</a></sup>. The inverters differ in two settings: the damping <var>D</var> (150 for inverter 1, 300 for inverter 2) and the virtual reactance, which I come to below.</p>
+</section>
+
+      <section id="sharing">
+        <h2>Sharing with no communication</h2>
+        <p>In steady state my virtual synchronous machine reduces to a droop line, <var>P</var> = <var>P</var><sub>0</sub> − <var>D</var>·Δ<var>ω</var>, which the <a href="inertia-droop.html#droop">virtual inertia and droop page</a> derives. Both inverters sit on the same bus, so they see the same frequency, so Δ<var>ω</var> is the same for both. The one with <var>D</var> = 300 therefore changes its power by exactly twice as much as the one with <var>D</var> = 150. Neither unit knows the other exists. The shared frequency is the only message.</p>
+        <p>The test: the base load is 8.4 Ω, and at 0.5 s a second 8.4 Ω is switched in next to it, which doubles the load on the bus. I ran it for 2.0 s and read the powers just before the step and at the end<sup class="fn"><a href="#fn-3" id="fnref-3">3</a></sup>.</p>
+
+        <div class="table-wrap"><table class="data">
+          <caption>+8.4 Ω load step on the shared bus, final V13<sup class="fn"><a href="#fn-3">3</a></sup><sup class="fn"><a href="#fn-4" id="fnref-4">4</a></sup></caption>
+          <thead><tr><th scope="col"></th><th scope="col">Before</th><th scope="col">After</th><th scope="col">Change</th><th scope="col">Hand check, after</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Inverter 1 (<var>D</var> = 150)</th><td>385.2 W</td><td>670.0 W</td><td>+284.8 W</td><td>670.3 W</td></tr>
+            <tr><th scope="row">Inverter 2 (<var>D</var> = 300)</th><td>520.3 W</td><td>1090.0 W</td><td>+569.7 W</td><td>1090.7 W</td></tr>
+            <tr><th scope="row">Frequency, both</th><td>59.857 Hz</td><td>59.554 Hz</td><td></td><td></td></tr>
+          </tbody>
+        </table></div>
+
+        <p>The change in inverter 2 divided by the change in inverter 1 is 569.7 / 284.8 = 2.000. The hand check uses the droop line with the measured frequency, and lands within 1 W of the simulation. The reactive powers at the end of the step were 34.3 and 21.2 VAR, under the 50 VAR target<sup class="fn"><a href="#fn-3">3</a></sup>.</p>
+
+        <figure class="chart" data-chart='{"type":"step","unit":"W","xLabel":"Time (s)","yLabel":"Power delivered (W)","x":[0,0.5,2.0],"series":[{"name":"Inverter 1, D = 150","tone":"inv1","values":[385.2,670.0,670.0]},{"name":"Inverter 2, D = 300","tone":"inv2","values":[520.3,1090.0,1090.0]}]}'>
+          <figcaption>Power of each inverter before and after the load step at 0.5 s, from the V13 run<sup class="fn"><a href="#fn-3">3</a></sup>. Only the two levels are plotted, not the transient between them, which had settled by about 1 s. Inverter 2's rise is twice inverter 1's.</figcaption>
+        </figure>
+
+        <figure class="widget" data-illustrative id="w-share">
+          <div class="gw">
+            <div class="gw-controls">
+              <label class="gw-field" for="sh-load">
+                <span>Load added to the bus: <output id="sh-out" for="sh-load">100 % of the +8.4 Ω step</output></span>
+                <input type="range" id="sh-load" min="0" max="130" step="1" value="100" aria-valuetext="100 percent of the 8.4 ohm step">
+              </label>
+            </div>
+            <div class="pb" id="sh-bars">
+              <div class="pb-row"><span class="pb-name inv1">Inverter 1</span><span class="pb-track"><span class="pb-fill inv1" id="sh-f1"></span><span class="pb-tick" id="sh-t1" title="Base load"></span></span><span class="pb-val" id="sh-v1">0 W</span></div>
+              <div class="pb-row"><span class="pb-name inv2">Inverter 2</span><span class="pb-track"><span class="pb-fill inv2" id="sh-f2"></span><span class="pb-tick" id="sh-t2" title="Base load"></span></span><span class="pb-val" id="sh-v2">0 W</span></div>
+            </div>
+            <p class="pb-legend">Bar full width is 1400 W. The white tick on each bar is that inverter's power at the base load.</p>
+            <p class="gw-readout" id="sh-readout" aria-live="polite">This widget needs JavaScript. At 100 % the inverters deliver 670 W and 1090 W at 59.554 Hz.</p>
+          </div>
+          <figcaption>Illustrative model, not the Simulink result. It uses only P = P<sub>0</sub> − D·Δω with P<sub>0</sub> = 250 W, D = 150 and 300, and treats the total bus load as a straight line between the two simulated points (905.5 W at the base load, 1760 W with the step). It ignores the current limit and the voltage dependence of a resistive load. At 0 % and 100 % it reproduces the table above.</figcaption>
+        </figure>
+
+        <p>Slide it past 100 % and the split stays at 1 to 2, because that is all the droop line says. The real inverters stop obeying it once the current limit takes over, which is the overload case below.</p>
+      </section>
+
+      <section id="circulating">
+        <h2>Circulating reactive power</h2>
+        <p>Two voltage sources that are slightly different will push reactive power back and forth between them without it ever reaching the load. I call that circulating reactive power: half the difference of the two units' <var>Q</var>, averaged over 0.1 s. My target for it, under the +4.2 Ω overload, was below 50 VAR. It took four steps to get there.</p>
+        <ol>
+          <li><strong>V12, 181 VAR.</strong> The baseline with virtual resistance for current limiting. I recomputed this number from the saved run when an older value would not reproduce<sup class="fn"><a href="#fn-5" id="fnref-5">5</a></sup>.</li>
+          <li><strong>V13 with a working voltage loop, 308 VAR. Worse.</strong> Making the <a href="voltage-loop.html">voltage loop</a> stiff regulated each capacitor voltage. That took the 2 mH filter inductor, which is 0.75 Ω at 60 Hz, out of the path between the two voltage sources, leaving only the tie of 0.05 Ω and about 0.075 Ω of reactance. A few volts of mismatch then drove hundreds of VAR. V12's weak voltage loop had been hiding the filter inductor in that path. The Q–V droop was not to blame: with it switched off the number was 872 VAR<sup class="fn"><a href="#fn-6" id="fnref-6">6</a></sup>.</li>
+          <li><strong>Equal virtual reactance of 0.75 Ω, 51 VAR.</strong> Put back a defined impedance between the units by adding a virtual one equal to the filter reactance<sup class="fn"><a href="#fn-7" id="fnref-7">7</a></sup>.</li>
+          <li><strong>Scaled virtual reactance, 11 VAR.</strong> Inverter 1 gets 0.75 Ω and inverter 2 gets 0.375 Ω<sup class="fn"><a href="#fn-8" id="fnref-8">8</a></sup>.</li>
+        </ol>
+
+        <figure class="chart" data-chart='{"type":"bar","unit":"VAR","xLabel":"Circulating Q under the +4.2 Ω overload","categories":["V12","V13, stiff voltage loop","V13, equal Xv 0.75 Ω","V13 final, scaled Xv"],"series":[{"name":"Circulating Q","tone":"ac","values":[181,308,51,11]}],"target":{"value":50,"label":"target < 50 VAR"}}'>
+          <figcaption>Circulating reactive power in the overload test, last 0.5 s<sup class="fn"><a href="#fn-5">5</a></sup><sup class="fn"><a href="#fn-6">6</a></sup><sup class="fn"><a href="#fn-7">7</a></sup><sup class="fn"><a href="#fn-8">8</a></sup>. Making the voltage control better first made this worse. The equal-Xv case, at 51 VAR, sits right on the target line.</figcaption>
+        </figure>
+
+        <div class="table-wrap"><table class="data">
+          <caption>Overload test, +4.2 Ω step at 0.5 s, last 0.5 s of a 3.0 s run<sup class="fn"><a href="#fn-6">6</a></sup><sup class="fn"><a href="#fn-7">7</a></sup><sup class="fn"><a href="#fn-8">8</a></sup></caption>
+          <thead><tr><th scope="col"></th><th scope="col">V12</th><th scope="col">V13, no Xv</th><th scope="col">Equal Xv 0.75 Ω</th><th scope="col">Scaled Xv 0.75 / 0.375 Ω</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Circulating Q</th><td>181 VAR</td><td>308 VAR</td><td>51 VAR</td><td><b>11 VAR</b></td></tr>
+            <tr><th scope="row">Q1 / Q2</th><td>271 / −90</td><td>399 / −223</td><td>139 / 37</td><td>102 / 79</td></tr>
+            <tr><th scope="row">I<sub>avg</sub> inverter 1 / 2</th><td>6.10 / 10.14 A</td><td>7.30 / 10.01 A</td><td>5.67 / 9.61 A</td><td>5.69 / 9.74 A</td></tr>
+            <tr><th scope="row">P1 + P2</th><td>2.56 kW</td><td>2.35 kW</td><td>2.44 kW</td><td>2.49 kW</td></tr>
+          </tbody>
+        </table></div>
+        <p>A larger equal reactance does not help: 2 Ω gave 90 VAR and cost about 15 % of the delivered power (2.08 kW)<sup class="fn"><a href="#fn-7">7</a></sup>. The scaling is the useful part. Inverter 2 carries twice the current, so with equal reactance its virtual voltage drop is twice as big, and the difference pushes reactive power onto inverter 1. Giving inverter 2 half the reactance makes the two drops equal, and the reactive power splits evenly.</p>
+      </section>
+
+      <section id="virtual-reactance">
+        <h2>How the virtual reactance is built</h2>
+        <p>A reactance <var>jX</var><sub>v</sub>·<var>i</var> leads the current by 90°, and in a three-phase system there is a neat shortcut for that without any derivative. For a positive-sequence set of currents, (<var>i</var><sub>c</sub> − <var>i</var><sub>b</sub>)/√3 is the phase A current advanced by 90°, which is j·<var>i</var><sub>a</sub>. So each phase's inductive drop is a fixed combination of the other two phase currents, scaled by <var>X</var><sub>v</sub>/√3. A small matrix does it for all three phases at once, the result goes through a one-sample delay, and it is subtracted from the voltage reference<sup class="fn"><a href="#fn-9" id="fnref-9">9</a></sup>.</p>
+        <p class="eq"><var>v</var><sub>ref,a</sub> = <var>V</var><sub>mag</sub>·sin <var>θ</var> − <var>R</var><sub>v</sub>·<var>i</var><sub>a</sub> − <var>X</var><sub>v</sub>·(<var>i</var><sub>c</sub> − <var>i</var><sub>b</sub>)/√3</p>
+        <p>Unlike the virtual resistance on the <a href="current-limiting.html">current limiting page</a>, which is zero until the current passes 10 A, this reactance is always on. The same expression with the phase indices rotated gives phases b and c.</p>
+      </section>
+
+      <section id="overload">
+        <h2>The overload test</h2>
+        <p>To push the pair past their rating I added a +4.2 Ω step. With the final virtual reactance, the two inverters stayed phase-locked: the phase difference did not drift over the last second and the averaged frequency difference was 0.000 Hz. Inverter 2 settled at 9.74 A ± 0.06 A and inverter 1 at 5.69 A<sup class="fn"><a href="#fn-8">8</a></sup>.</p>
+        <aside class="note">That 9.74 A is below the 10 A limit, so in the final design this test no longer reaches the current limiter. The virtual reactance itself lowers the current enough. It means the overload run does not prove the limiter works. The bolted-fault test on the <a href="current-limiting.html">current limiting page</a> does<sup class="fn"><a href="#fn-8">8</a></sup>.</aside>
+
+        <h3>A misdiagnosis worth keeping</h3>
+        <p>An earlier overload run, with two integrating current limiters, had the two frequencies reading 59.80 and 59.74 Hz after 2 s, and I wrote it down as the two inverters falling out of step. They were not. Integrating the frequency difference showed the phase offset stayed within a few degrees, and the real problem was a limit cycle, with each limiter cutting its voltage while the other picked up the current, about every 0.12 s<sup class="fn"><a href="#fn-10" id="fnref-10">10</a></sup>. The full story is on the <a href="what-went-wrong.html">what went wrong page</a>.</p>
+
+        <figure class="img"><img src="assets/img/v12_ab_compare.webp" alt="MATLAB plot comparing the V12 overload options: phase difference between the two inverters, circulating reactive power, and the average current of inverter 2, for the baseline, option A and option B." loading="lazy" width="940" height="790"><figcaption>The V12 overload comparison: the baseline, option A (freeze the swing equation while limited) and option B (virtual resistance, which I kept). It plots the phase difference between the inverters, the circulating reactive power and the average current of inverter 2. It is a V12 figure, made before the voltage loop and the virtual reactance existed, and the circulating-Q values I first used for V12 were corrected afterwards, so I take those from the tables above, not from this picture<sup class="fn"><a href="#fn-10">10</a></sup>.</figcaption></figure>
+      </section>
+
+      <section id="unit">
+        <h2>The unit these two copies are made of</h2>
+        <p>Everything above is simulation of a controller and a circuit. The design stops at one packaged unit, below, and the second inverter in the tests is simply another copy of it. No hardware was built.</p>
+        <figure class="part-viewer" data-model="assets/models/inverter/unit.glb"
+                data-poster="assets/renders/unit_open.webp" data-tier="A">
+          <figcaption>One inverter unit with the lid off, from my packaging design. Drag to rotate.</figcaption>
+        </figure>
+      </section>
+
+      <section class="footnotes" aria-label="Sources for this page"><h2>Sources for this page</h2>
+        <ol>
+          <li id="fn-1">Scrollytelling brief, section 2: tie 0.05 Ω + 0.2 mH per phase, base load 8.4 Ω, +8.4 Ω step at 0.5 s; manual V10, Step 4; D5, D21. <a href="#fnref-1" aria-label="Back to text">↩</a></li>
+          <li id="fn-2">V13, D22 and D26: Xv1 = 0.75 Ω, Xv2 = Xv/2 = 0.375 Ω, scaled inversely with each unit's share.</li>
+          <li id="fn-3">V13, D26. <code>compare_v13xvs_8p4.txt</code>: base 8.4 Ω, a second 8.4 Ω at 0.5 s, 2.0 s run; Q1 / Q2 = 34.3 / 21.2 VAR; D20 for the settling time. <a href="#fnref-3" aria-label="Back to text">↩</a></li>
+          <li id="fn-4">V13, D26: hand check P = P0 − D·Δω gives 670.3 / 1090.7 W. <a href="#fnref-4" aria-label="Back to text">↩</a></li>
+          <li id="fn-5">V12, D18: circulating Q recomputed with <code>gfi_metrics.m</code>, 181 VAR (max 273), last 0.5 s of the +4.2 Ω overload. <a href="#fnref-5" aria-label="Back to text">↩</a></li>
+          <li id="fn-6">V13, D21. <code>compare_v13pi_4p2.txt</code>, <code>compare_v13noKq_4p2.txt</code>: 308 VAR; 872 VAR with Kq = 0. The explanation is the filter inductor leaving the coupling path. <a href="#fnref-6" aria-label="Back to text">↩</a></li>
+          <li id="fn-7">V13, D23. <code>compare_v13xv075_4p2.txt</code>, <code>compare_v13xv2_4p2.txt</code>: equal Xv 0.75 Ω gives 51 VAR; 2 Ω gives 90 VAR and 2.08 kW. <a href="#fnref-7" aria-label="Back to text">↩</a></li>
+          <li id="fn-8">V13, D26. <code>compare_v13xvs_4p2.txt</code>: 11 VAR; Q1 / Q2 = 102 / 79; I_avg 5.69 / 9.74 ± 0.06 A; phase drift 0, max 0.1 s-averaged |Δf| 0; with Xv the step does not reach the 10 A limit. <a href="#fnref-8" aria-label="Back to text">↩</a></li>
+          <li id="fn-9">V13, D22 and manual V13, Step 4: K = Xv/√3·[0 −1 1; 1 0 −1; −1 1 0], one-sample unit delay, third input of the voltage-reference sum. <a href="#fnref-9" aria-label="Back to text">↩</a></li>
+          <li id="fn-10">V12, D7, D9 and D11: the limit cycle (about 0.12 s period) and the bounded phase difference; figure <code>v12_AB_compare.png</code>, circulating-Q values corrected in D18. <a href="#fnref-10" aria-label="Back to text">↩</a></li>
+        </ol>
+      </section>
+
+      <nav class="pager"><a rel="prev" href="current-limiting.html">Current limiting and fault ride-through</a><a rel="next" href="packaging-thermal.html">Packaging and thermal</a></nav>
+    </article>
+  </main>
+  <footer class="site-footer" data-site-footer></footer>
+
+  <script type="module">
+    // Illustrative model: steady-state droop P = P0 - D*(w - w0), two units on one bus.
+    // The total bus load is interpolated between the two simulated points (base load, +8.4 ohm step).
+    const P0 = 250, D1 = 150, D2 = 300, BASE = 385.2 + 520.3, STEPPED = 670.0 + 1090.0, FULL = 1400;
+    const slider = document.getElementById('sh-load'), out = document.getElementById('sh-out');
+    const f1 = document.getElementById('sh-f1'), f2 = document.getElementById('sh-f2');
+    const t1 = document.getElementById('sh-t1'), t2 = document.getElementById('sh-t2');
+    const v1 = document.getElementById('sh-v1'), v2 = document.getElementById('sh-v2');
+    const readout = document.getElementById('sh-readout');
+    const minus = (s) => s.replace('-', '−');
+
+    function solve(load) {
+      // load = P1 + P2 = 2*P0 - (D1 + D2)*dw
+      const dw = (2 * P0 - load) / (D1 + D2);          // rad/s above nominal (negative when loaded)
+      return { dw, p1: P0 - D1 * dw, p2: P0 - D2 * dw, f: 60 + dw / (2 * Math.PI) };
+    }
+    const base = solve(BASE);
+    t1.style.left = (base.p1 / FULL * 100) + '%';
+    t2.style.left = (base.p2 / FULL * 100) + '%';
+
+    function draw() {
+      const s = parseFloat(slider.value);
+      const txt = s + ' % of the +8.4 Ω step';
+      out.textContent = txt;
+      slider.setAttribute('aria-valuetext', s + ' percent of the 8.4 ohm step');
+      const r = solve(BASE + (STEPPED - BASE) * s / 100);
+      f1.style.width = Math.min(100, r.p1 / FULL * 100) + '%';
+      f2.style.width = Math.min(100, r.p2 / FULL * 100) + '%';
+      v1.textContent = r.p1.toFixed(1) + ' W';
+      v2.textContent = r.p2.toFixed(1) + ' W';
+      const d1 = r.p1 - base.p1, d2 = r.p2 - base.p2;
+      const ratio = d1 > 0.05 ? (d2 / d1).toFixed(3) : 'not defined at the base load';
+      readout.innerHTML = 'Frequency: <b>' + r.f.toFixed(3) + ' Hz</b>. Change since base load: inverter 1 <b>' + minus((d1 >= 0 ? '+' : '') + d1.toFixed(1)) +
+        ' W</b>, inverter 2 <b>' + minus((d2 >= 0 ? '+' : '') + d2.toFixed(1)) + ' W</b>. Ratio of changes: <b>' + ratio + '</b>.';
+    }
+    slider.addEventListener('input', draw);
+    draw();
+  </script>
+</body>
+</html>

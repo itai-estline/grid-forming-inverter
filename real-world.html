@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Grid-forming in the real world · Grid-Forming Inverter</title>
+  <meta name="description" content="Why grid-forming inverters matter: how power reaches your home, what spinning generators give the grid, how following and forming differ, which real projects and grid codes exist, and what is still unsolved.">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/detail.css">
+  <style>
+    /* Page-local styles for the two hand-drawn diagrams on this page. */
+    .rw-scroll { overflow-x: auto; }
+    .rw-scroll:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+    svg.rw { display: block; width: 100%; min-width: 600px; height: auto; }
+    svg.rw .bx { fill: var(--night-2); stroke: var(--night-4); stroke-width: 1.5; }
+    svg.rw .bx.hot { stroke: var(--ac); stroke-width: 2; }
+    svg.rw .ln { fill: none; stroke: var(--ink-3); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+    svg.rw .ln.c-ac { stroke: var(--ac); }
+    svg.rw .ln.c-dc { stroke: var(--dc); }
+    svg.rw .ln.c-ctl { stroke: var(--ctl); }
+    svg.rw .ln.c-warn { stroke: var(--warn); }
+    svg.rw .dash { stroke-dasharray: 5 6; }
+    svg.rw .mk { stroke: none; fill: var(--ink-3); }
+    svg.rw .mk.c-ac { fill: var(--ac); }
+    svg.rw .mk.c-dc { fill: var(--dc); }
+    svg.rw .mk.c-ctl { fill: var(--ctl); }
+    svg.rw text { font-family: var(--font-sans); font-size: 13px; fill: var(--ink); stroke: none; }
+    svg.rw text.lbl { font-size: 12px; fill: var(--ink-3); }
+    svg.rw text.sub { font-family: var(--font-mono); font-size: 11px; fill: var(--ink-2); }
+    svg.rw text.c-ac { fill: var(--ac); }
+    svg.rw text.c-dc { fill: var(--dc); }
+    svg.rw text.c-ctl { fill: var(--ctl); }
+    svg.rw text.c-warn { fill: var(--warn); }
+    svg.rw text.hd { font-size: 14px; font-weight: 600; }
+  </style>
+  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }</script>
+  <script type="module" src="js/detail/detail.js"></script>
+</head>
+<body class="detail" data-page="real-world">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header" data-site-header></header>
+  <main id="main">
+    <article class="page">
+      <header class="page-head">
+        <p class="eyebrow">The big picture · Stations 01, 04, 05, 15</p>
+        <h1>Grid-forming in the real world</h1>
+        <p class="lede">My design is one small inverter in a simulation. This page is about why that kind of inverter matters on real grids, which real projects and grid codes exist, and what is still unsolved. I checked every outside fact against a source and linked it. Where I could not, I describe things in general terms.</p>
+        <p class="back-links">
+          <a href="index.html#s01">Back to the journey, station 01</a>
+          <a href="index.html#s04">Station 04</a>
+          <a href="index.html#s05">Station 05</a>
+          <a href="index.html#s15">Station 15</a>
+        </p>
+      </header>
+
+      <section id="chain">
+        <h2>Where your power comes from</h2>
+        <p>Follow the power backwards from a phone charger. It comes through the wall from the distribution lines on your street, which are fed by a substation. The substation is fed by high-voltage transmission lines, and those start at a step-up transformer beside a power plant. In North America that whole system runs at a nominal 60 Hz<sup class="fn"><a href="#fn-1" id="fnref-1">1</a></sup>.</p>
+        <p>Solar panels and batteries make DC. Wind turbines make AC at a frequency that changes with the wind. Neither can be connected to the grid directly. An inverter (or a converter that does the same job) sits between the plant and the transformer and turns what the plant makes into grid-quality 60 Hz AC. That makes the inverter the gateway: every unit of solar, battery and wind power passes through one.</p>
+
+</section>
+
+      <section id="heartbeat">
+        <h2>The old heartbeat, and why it is fading</h2>
+        <p>For a century the grid's frequency has been held by big spinning machines. Every steam, gas and hydro generator is a heavy rotor locked to the grid at 60 Hz. If demand suddenly jumps, the rotors slow down a little and give up some of their stored motion to cover it. That stored motion is inertia, and it acts like a shock absorber: it makes frequency change slowly.</p>
+        <p>When a large generator trips or demand jumps, frequency starts to fall. How fast depends on the total inertia on the system. Grid operators describe this as the rate of change of frequency (RoCoF), and lower inertia means a higher RoCoF after the same event. If it falls too fast there is not enough time for the frequency controls to act<sup class="fn"><a href="#fn-2" id="fnref-2">2</a></sup>.</p>
+        <p>Solar panels and batteries have no rotor. As they replace spinning plants, the system has less inertia unless something supplies it another way. AEMO, the Australian market operator, names the retirement of synchronous generators alongside more inverter-based resources as a reason for the new problems in system strength, frequency and voltage control<sup class="fn"><a href="#fn-3" id="fnref-3">3</a></sup>. My own version of the inertia idea is on the <a href="inertia-droop.html">inertia and droop page</a>, where a control loop in software plays the part of the rotor.</p>
+      </section>
+
+      <section id="follow-or-form">
+        <h2>Follow or form</h2>
+        <p>Nearly all inverter-based resources on today's grids use grid-following control, according to a NERC white paper<sup class="fn"><a href="#fn-4" id="fnref-4">4</a></sup>. A grid-following inverter measures the grid's voltage, locks onto its phase with a phase-locked loop (a PLL), and pushes current into it. In circuit terms it behaves like a current source. It needs a voltage to follow. If the grid is weak or gone, it has nothing to lock to.</p>
+        <p>A grid-forming inverter works the other way round. It produces its own voltage and frequency and lets the current be whatever the load takes, so it behaves like a voltage source<sup class="fn"><a href="#fn-5" id="fnref-5">5</a></sup>. NERC puts it as controls whose main aim is to hold an internal voltage phasor nearly constant over the first fractions of a second after a disturbance<sup class="fn"><a href="#fn-4">4</a></sup>. Both NERC and AEMO say there is no single agreed definition yet<sup class="fn"><a href="#fn-4">4</a></sup><sup class="fn"><a href="#fn-6" id="fnref-6">6</a></sup>.</p>
+
+<p>My design is a former. Its swing equation and droop law let it set its own frequency and share load with a second unit. That is all explained in the pages that follow this one.</p>
+      </section>
+
+      <section id="unlocks">
+        <h2>What forming unlocks</h2>
+        <ul>
+          <li><strong>Islanded microgrids.</strong> A group of loads cut off from the main grid still needs something to hold the voltage and frequency. A forming inverter with a battery can do that on its own. A follower cannot.</li>
+          <li><strong>Black start.</strong> Black start means restoring a power station or grid after a shutdown without drawing on the external network<sup class="fn"><a href="#fn-7" id="fnref-7">7</a></sup>. NERC lists blackstart as a possible capability of some grid-forming inverters, not all of them<sup class="fn"><a href="#fn-4">4</a></sup>.</li>
+          <li><strong>Weak grids.</strong> A weak grid (low system strength) is one where the voltage moves a lot when current changes. Followers can become unstable there because their PLL tracks a wobbling voltage. NERC recommends operation in low system strength conditions as a grid-forming capability<sup class="fn"><a href="#fn-4">4</a></sup>, and AEMO says forming inverters have the potential to address some of the system-strength problems<sup class="fn"><a href="#fn-3">3</a></sup>.</li>
+          <li><strong>Sharing without talking.</strong> With a droop law, each unit lets its frequency sag a little as it takes more load, so several units split a change between them with no communication. That is what my two-unit result shows at small scale.</li>
+        </ul>
+      </section>
+
+      <section id="installations">
+        <h2>Real installations</h2>
+        <p>Three projects I could check against a source. I did not build or test any of them. These are only examples of the technology in use.</p>
+
+        <h3>Hornsdale Power Reserve, South Australia</h3>
+        <p>Hornsdale is a large Tesla battery. Its expansion added 50 MW / 64.5 MWh, and ARENA, Australia's renewable energy agency, helped fund it with A$8 million of a A$71 million project<sup class="fn"><a href="#fn-8" id="fnref-8">8</a></sup>. The expansion was used to trial a software mode in which the battery behaves like a synchronous machine and gives a virtual inertial response. The project reports call it virtual machine mode. Trade press describes the same thing as a grid-forming inverter providing inertia<sup class="fn"><a href="#fn-9" id="fnref-9">9</a></sup>.</p>
+
+        <h3>Blackhillock, Scotland</h3>
+        <p>Zenobe's Blackhillock battery was announced as live on 3 March 2025. The first phase is 200 MW / 400 MWh, with grid-forming inverters from SMA, and it provides stability services (inertia and short-circuit level) to NESO, the GB system operator<sup class="fn"><a href="#fn-10" id="fnref-10">10</a></sup>. It is one of the grid-forming batteries bought under NESO's Stability Pathfinder. Zenobe's later project page says a second phase is still being commissioned<sup class="fn"><a href="#fn-11" id="fnref-11">11</a></sup>, so I give only the first phase.</p>
+
+        <h3>Kauai, Hawaii</h3>
+        <p>On Kauai the utility, KIUC, runs a small island grid with a lot of solar and storage. After an oil-fired generator tripped in late 2021, frequency dropped and oscillations appeared in the first minute. Three of the four solar-plus-storage plants involved used grid-following inverters. KIUC then moved to grid-forming controls at its solar-plus-storage plants, and the US national lab NREL (now the National Laboratory of the Rockies) tested the island grid and reported that grid-forming resources significantly improved stability<sup class="fn"><a href="#fn-12" id="fnref-12">12</a></sup>. I could not open the lab's own page, so this one rests on a news report of it. I give no plant sizes because I could not confirm them.</p>
+      </section>
+
+      <section id="grid-codes">
+        <h2>Grid codes and standards</h2>
+        <p>Rules are starting to name grid-forming capability. Three developments I could verify:</p>
+        <ul>
+          <li><strong>AEMO (Australia), May 2023.</strong> A voluntary specification, version 1.0, that sets out the core capabilities a device should have to be called grid-forming, plus extra desirable ones. It is voluntary, and AEMO says it is meant to inform future rule changes and procurement<sup class="fn"><a href="#fn-6">6</a></sup>.</li>
+          <li><strong>Great Britain, February 2022.</strong> Grid Code change GC0137 added a minimum specification for grid-forming capability. It is not mandatory<sup class="fn"><a href="#fn-13" id="fnref-13">13</a></sup>.</li>
+          <li><strong>Europe, 2025.</strong> ENTSO-E published a technical report in November 2025 on grid-forming requirements under the draft NC RfG 2.0, the update to the EU connection rules for generators. The requirements in the draft are described as non-exhaustive, and the report itself is non-binding<sup class="fn"><a href="#fn-14" id="fnref-14">14</a></sup>. I could only confirm that the code is a draft, so I say nothing about when it takes effect.</li>
+        </ul>
+        <p>The NERC white paper of September 2023 is a recommendation, not a rule: it offers a working definition and a list of functions to ask of grid-forming batteries<sup class="fn"><a href="#fn-4">4</a></sup>. My own work makes no grid-code compliance claim. I never tested it against any of these documents.</p>
+      </section>
+
+      <section id="open-problems">
+        <h2>What is still unsolved</h2>
+        <p>NERC says understanding of how grid-forming units affect the bulk power system is still at an early stage, and that each unit has to be studied and tuned for its system<sup class="fn"><a href="#fn-15" id="fnref-15">15</a></sup>. Three open problems line up with things I ran into in my own simulations.</p>
+
+        <h3>Fault current</h3>
+        <p>A voltage source will try to push as much current as a fault asks for, and power electronics cannot carry that. NERC's wording about fault ride-through is conditional: it asks for adequate fault current "if hardware limits allow"<sup class="fn"><a href="#fn-15">15</a></sup>. In my model the limit is 10 A, measured as a one-cycle average of the phase current. In the final version (V13) a bolted fault held the current at 10.0 A<sup class="fn"><a href="#fn-16" id="fnref-16">16</a></sup>. The trick was a virtual resistance that switches on only when the current is over the limit. Getting there took several versions, which are described on the <a href="current-limiting.html">current limiting page</a>. A simulated inverter holding a limit does not mean a real one would, because the first cycles of a real fault are faster than my software loop.</p>
+
+        <h3>Many units, one grid</h3>
+        <p>Two units are easy to describe. In V13 they shared a load step exactly 2:1, matching their droop gains of 300 and 150<sup class="fn"><a href="#fn-17" id="fnref-17">17</a></sup>. A real grid has thousands of units from different makers with different controls, and their interaction is a research question. The <a href="parallel.html">parallel page</a> shows how even two units needed extra care.</p>
+
+        <h3>Standards and testing</h3>
+        <p>There is still no agreed definition, and the rules above are mostly voluntary or draft. Meeting one document does not settle everything either. Transgrid, an Australian network owner, states that meeting AEMO's voluntary specification does not by itself guarantee a battery can provide its own voltage-waveform support service<sup class="fn"><a href="#fn-18" id="fnref-18">18</a></sup>.</p>
+        <aside class="note">
+          <p>To be clear about scope: this project is simulation and packaging design. No hardware was built, and I make no claim of grid-code compliance or certification.</p>
+        </aside>
+      </section>
+
+      <section class="footnotes" aria-label="Sources for this page"><h2>Sources for this page</h2>
+        <ol>
+          <li id="fn-1">US Department of Energy, <a href="https://www.energy.gov/sites/default/files/2023-12/National%20Transmission%20Needs%20Study%20-%20Final_2023.12.1.pdf" rel="noopener">National Transmission Needs Study</a> (nominal 60 Hz); US EIA, <a href="https://www.eia.gov/todayinenergy/detail.php?id=3990" rel="noopener">Electric systems respond quickly to the sudden loss of supply or demand</a>. <a href="#fnref-1" aria-label="Back to text">↩</a></li>
+          <li id="fn-2">ERCOT, <a href="https://www.ercot.com/files/docs/2018/04/04/Inertia_Basic_Concepts_Impacts_On_ERCOT_v0.pdf" rel="noopener">Inertia: Basic Concepts and Impacts on the ERCOT Grid</a> (2018). <a href="#fnref-2" aria-label="Back to text">↩</a></li>
+          <li id="fn-3">AEMO, <a href="https://aemo.com.au/-/media/files/initiatives/primary-frequency-response/2023/gfm-voluntary-spec.pdf?la=en" rel="noopener">Voluntary Specification for Grid-forming Inverters</a>, version 1.0, 29 May 2023, section 1.1. <a href="#fnref-3" aria-label="Back to text">↩</a></li>
+          <li id="fn-4">NERC, <a href="https://www.nerc.com/comm/RSTC_Reliability_Guidelines/White_Paper_Grid_Forming_Technology.pdf" rel="noopener">White Paper: Grid Forming Functional Specifications for BPS-Connected Battery Energy Storage Systems</a>, September 2023, executive summary. <a href="#fnref-4" aria-label="Back to text">↩</a></li>
+          <li id="fn-5">NREL, <a href="https://www.nrel.gov/docs/fy21osti/73476.pdf" rel="noopener">Research Roadmap on Grid-Forming Inverters</a>, NREL/TP-5D00-73476, November 2020. I could not open this document and rely on its published abstract and summaries. <a href="#fnref-5" aria-label="Back to text">↩</a></li>
+          <li id="fn-6">AEMO, <a href="https://aemo.com.au/-/media/files/initiatives/primary-frequency-response/2023/gfm-voluntary-spec.pdf?la=en" rel="noopener">Voluntary Specification for Grid-forming Inverters</a>, version 1.0, 29 May 2023 (purpose, and section 2.1 on the absence of a single agreed definition). <a href="#fnref-6" aria-label="Back to text">↩</a></li>
+          <li id="fn-7">US Department of Energy, <a href="https://www.energy.gov/cmei/water/glossary-hydropower-terms" rel="noopener">Glossary of Hydropower Terms</a> (black start). <a href="#fnref-7" aria-label="Back to text">↩</a></li>
+          <li id="fn-8">ARENA, <a href="https://arena.gov.au/projects/hornsdale-power-reserve-upgrade" rel="noopener">Hornsdale Power Reserve Upgrade</a> (50 MW / 64.5 MWh, A$8 million of A$71 million). <a href="#fnref-8" aria-label="Back to text">↩</a></li>
+          <li id="fn-9">ARENA, <a href="https://arena.gov.au/knowledge-bank/hornsdale-power-reserve-virtual-machine-mode-testing-summary-report" rel="noopener">Hornsdale Power Reserve Virtual Machine Mode Testing Summary Report</a>; trade press: pv magazine Australia, <a href="https://www.pv-magazine-australia.com/2022/07/27/hornsdale-big-battery-begins-providing-inertia-grid-services-at-scale-in-world-first" rel="noopener">Hornsdale big battery begins providing inertia grid services at scale in world first</a>, 27 July 2022. <a href="#fnref-9" aria-label="Back to text">↩</a></li>
+          <li id="fn-10">Zenobe, <a href="https://www.zenobe.com/?p=17752" rel="noopener">Zenobe powers up a world first solution and Europe's biggest battery at Blackhillock, Scotland</a>, 3 March 2025. <a href="#fnref-10" aria-label="Back to text">↩</a></li>
+          <li id="fn-11">Zenobe, <a href="https://www.zenobe.com/battery-project-development/blackhillock-bess/" rel="noopener">Blackhillock, Scotland</a> (project page). <a href="#fnref-11" aria-label="Back to text">↩</a></li>
+          <li id="fn-12">ESS News, <a href="https://www.ess-news.com/2026/01/14/grid-forming-inverters-significantly-enhance-grid-stability-us-national-lab-finds/" rel="noopener">Grid-forming inverters significantly enhance grid stability, US national lab finds</a>, 14 January 2026; the lab's own write-up is <a href="https://www.nrel.gov/news/detail/features/2026/with-inverters-an-island-adapts-to-the-changing-physics-of-power-grids" rel="noopener">With Inverters, An Island Adapts to Changing Physics of Power Grids</a>. <a href="#fnref-12" aria-label="Back to text">↩</a></li>
+          <li id="fn-13">NESO, <a href="https://neso.energy/industry-information/codes/gc/modifications/gc0137-minimum-specification-required-provision-gb-grid-forming-gbgf-capability-formerly-virtual-synchronous-machinevsm-capability" rel="noopener">GC0137 Minimum specification required for provision of GB Grid Forming (GBGF) capability</a>; implemented 14 February 2022. <a href="#fnref-13" aria-label="Back to text">↩</a></li>
+          <li id="fn-14">ENTSO-E, <a href="https://entsoe.eu/news/2025/11/04/entso-e-publishes-phase-ii-technical-report-on-grid-forming-requirements" rel="noopener">ENTSO-E publishes Phase II technical report on grid forming requirements</a>, 4 November 2025. <a href="#fnref-14" aria-label="Back to text">↩</a></li>
+          <li id="fn-15">NERC white paper, September 2023, as in note 4. <a href="#fnref-15" aria-label="Back to text">↩</a></li>
+          <li id="fn-16">V13, D27. Decision log, bolted fault, current held at 10.0 A. <a href="#fnref-16" aria-label="Back to text">↩</a></li>
+          <li id="fn-17">V13, D26. Decision log, load step, ΔP<sub>2</sub> / ΔP<sub>1</sub> = 2.000 with D = 300 and D = 150. <a href="#fnref-17" aria-label="Back to text">↩</a></li>
+          <li id="fn-18">Transgrid, <a href="https://transgrid.com.au/media/fctbpgif/2406-transgrid_stable-voltage-waveform-support-specifications-for-grid-forming-bess.pdf" rel="noopener">Stable voltage waveform support specifications for grid-forming BESS</a> (2024). <a href="#fnref-18" aria-label="Back to text">↩</a></li>
+        </ol>
+      </section>
+
+      <nav class="pager"><a rel="prev" href="index.html">Back to the journey</a><a rel="next" href="power-stage.html">Power stage and filter</a></nav>
+    </article>
+  </main>
+  <footer class="site-footer" data-site-footer></footer>
+</body>
+</html>

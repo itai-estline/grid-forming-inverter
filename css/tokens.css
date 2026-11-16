@@ -1,0 +1,97 @@
+/* Shared design tokens for the home page and the detail pages.
+   Owner: lead. Do not rename tokens; add new ones at the bottom if you need them. */
+
+@font-face {
+  font-family: "Bodoni Moda";
+  src: url("../assets/fonts/bodoni-moda-latin-wght-normal.woff2") format("woff2");
+  font-weight: 400 900; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "Bodoni Moda";
+  src: url("../assets/fonts/bodoni-moda-latin-wght-italic.woff2") format("woff2");
+  font-weight: 400 900; font-style: italic; font-display: swap;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("../assets/fonts/barlow-latin-400-normal.woff2") format("woff2");
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("../assets/fonts/barlow-latin-500-normal.woff2") format("woff2");
+  font-weight: 500; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("../assets/fonts/barlow-latin-600-normal.woff2") format("woff2");
+  font-weight: 600; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "Barlow";
+  src: url("../assets/fonts/barlow-latin-400-italic.woff2") format("woff2");
+  font-weight: 400; font-style: italic; font-display: swap;
+}
+@font-face {
+  font-family: "Barlow Condensed";
+  src: url("../assets/fonts/barlow-condensed-latin-500-normal.woff2") format("woff2");
+  font-weight: 500; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "Barlow Condensed";
+  src: url("../assets/fonts/barlow-condensed-latin-600-normal.woff2") format("woff2");
+  font-weight: 600; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "DM Mono";
+  src: url("../assets/fonts/dm-mono-latin-400-normal.woff2") format("woff2");
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "DM Mono";
+  src: url("../assets/fonts/dm-mono-latin-500-normal.woff2") format("woff2");
+  font-weight: 500; font-style: normal; font-display: swap;
+}
+
+:root {
+  /* Night palette */
+  --night-0: #05070d;      /* deepest background */
+  --night-1: #0a0f1c;      /* page background */
+  --night-2: #111a2e;      /* panels, fog colour */
+  --night-3: #1b2740;      /* raised panels, borders */
+  --night-4: #2a3858;      /* hairlines on dark */
+  --dusk-glow: #e08a4a;    /* thin band of sunset on the horizon */
+
+  /* Text */
+  --ink: #ece7e1;          /* primary text on dark */
+  --ink-2: #b8bfcc;        /* secondary text */
+  --ink-3: #8690a3;        /* muted text, still AA on --night-1 */
+
+  /* Energy colours (these are also the 3D emissive colours) */
+  --ac: #3fe0ff;           /* AC power: cyan */
+  --dc: #ffab2e;           /* DC power: amber */
+  --ctl: #ff4fd8;          /* control signals: magenta */
+  --home: #ffe2b0;         /* lit windows: warm white */
+  --inv1: #7cf29c;         /* inverter 1 in the parallel scene: mint */
+  --inv2: #b28dff;         /* inverter 2 in the parallel scene: violet */
+  --warn: #ff6b4a;         /* fault, over-limit */
+  --ok: #7cf29c;
+
+  /* FEA thermal ramp, cold to hot (matches the Ansys screenshots) */
+  --fea-0: #1c3cff; --fea-1: #18b8ff; --fea-2: #19e6a0; --fea-3: #8cf02a;
+  --fea-4: #ffe81a; --fea-5: #ff8a14; --fea-6: #f0241c;
+
+  /* Type */
+  --font-serif: "Bodoni Moda", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --font-sans: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-label: "Barlow Condensed", "Barlow", "Arial Narrow", sans-serif;
+  --font-code: "DM Mono", ui-monospace, Consolas, monospace;
+  --font-mono: "DM Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  /* Spacing scale (4 px base) */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 24px;
+  --s-6: 32px; --s-7: 48px; --s-8: 64px; --s-9: 96px;
+
+  --radius: 10px;
+  --radius-pill: 999px;
+  --ease: cubic-bezier(.22, .8, .2, 1);
+}
